@@ -1,0 +1,7 @@
+[package]
+name = "wyag-rust"
+version = "0.1.0"
+authors = ["nf <nflower@adaptiveplanningandexecution.com>"]
+edition = "2018"
+
+[dependencies]

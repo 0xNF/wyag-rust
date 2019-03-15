@@ -1,5 +1,6 @@
 use std::env;
 use std::process;
+mod macros;
 
 fn main() {
     let config = match Config::new(env::args()) {
@@ -69,7 +70,7 @@ fn parse_args(args: Vec<String>, c: &mut Config) {
                 c.isInit = true;
                 match args.next() {
                     Some(s) => c.path = s.to_string(),
-                    None => c.path = "./".to_string(),
+                    None => c.path = ".".to_string(),
                 };
                 break;
             }

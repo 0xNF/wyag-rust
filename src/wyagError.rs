@@ -1,26 +1,25 @@
 use std::{error::Error, fmt};
 
-
 #[derive(Debug, Default)]
-pub struct WyagError<'a> {
-    _message: &'a str,
+pub struct WyagError {
+    _message: String,
 }
 
-impl<'a> WyagError<'a> {
-    pub fn new(message: &'a str) -> WyagError {
+impl WyagError {
+    pub fn new(message: &str) -> WyagError {
         WyagError {
-            _message: message,
+            _message: String::from(message),
         }
     }
 }
 
-impl<'a> Error for WyagError<'a> {
+impl Error for WyagError {
     fn description(&self) -> &str {
-        self._message
+        self._message.as_ref()
     }
 }
 
-impl<'a> fmt::Display for WyagError<'a> {
+impl fmt::Display for WyagError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Failed to do task")
     }

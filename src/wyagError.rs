@@ -11,6 +11,13 @@ impl WyagError {
             _message: String::from(message),
         }
     }
+
+    /// TODO incorporate err field
+    pub fn new_with_error(message: &str, err: Box<std::error::Error>) -> WyagError {
+        WyagError {
+            _message: String::from(message),
+        }
+    }
 }
 
 impl Error for WyagError {

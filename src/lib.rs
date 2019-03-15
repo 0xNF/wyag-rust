@@ -14,23 +14,30 @@ impl<'a> GitRepository<'a> {
     pub fn new(path: &'a str, force: bool) -> Result<GitRepository, wyagError::WyagError> {
         // Set up the gitdir
         let git_path = Path::new(path).join(".git");
-        if !force || git_path.is_dir() {
+        if !(force || git_path.is_dir()) {
             let serr = "Not a git path";
             return Err(wyagError::WyagError::new(serr));
         }
 
         // Read configuration file in .git/config
-        let git_conf_path = match repo_file_path(&git_path.join("config"), false, Vec::new()) {
+        let git_conf_path = match repo_file_path(&git_path, false, vec!["config"]) {
             Ok(p) => p,
-            Err(m) => return Err(wyagError::WyagError::new("Failed to create .git file")),
+            Err(m) => {
+                return Err(wyagError::WyagError::new("Failed to find .git folder"));
+            }
         };
 
         // Read if exists
         let mut conf = Ini::new();
         if git_conf_path.exists() {
-            match Ini::load_from_file(git_conf_path) {
+            match Ini::load_from_file(&git_conf_path) {
                 Ok(c) => conf = c,
-                Err(m) => return Err(wyagError::WyagError::new("Failed to read git config file")),
+                Err(m) => {
+                    return Err(wyagError::WyagError::new_with_error(
+                        "Failed to read git config file",
+                        Box::new(m),
+                    ));
+                }
             };
         } else if !force {
             return Err(wyagError::WyagError::new("Configuration file missing"));
@@ -49,7 +56,7 @@ impl<'a> GitRepository<'a> {
 
         Ok(GitRepository {
             worktree: path,
-            gitdir: Path::new(path).join(".git"),
+            gitdir: git_path.to_path_buf(),
             conf: conf,
         })
     }
@@ -62,7 +69,7 @@ fn repo_path_gr(gr: &GitRepository, paths: Vec<&str>) -> PathBuf {
 
 /// Compute path under the repo's gitdir using a raw path as the root
 fn repo_path_path(root: &PathBuf, paths: Vec<&str>) -> PathBuf {
-    let mut p = root.join("");
+    let mut p = root.to_path_buf();
     for fragment in paths {
         p = p.join(fragment);
     }
@@ -85,7 +92,6 @@ fn repo_dir_path(
     paths: Vec<&str>,
 ) -> Result<PathBuf, Box<std::error::Error>> {
     let p = repo_path_path(root, paths);
-
     if p.exists() {
         if p.is_dir() {
             return Ok(p);
@@ -95,6 +101,7 @@ fn repo_dir_path(
             )));
         }
     }
+
     if mk_dir {
         let pat: &Path = p.as_path();
         return Ok(p);
@@ -126,8 +133,18 @@ fn repo_file_path(
     mk_dir: bool,
     paths: Vec<&str>,
 ) -> Result<PathBuf, Box<std::error::Error>> {
-    let lenVec = paths.len() - 1;
-    repo_dir_path(root, mk_dir, paths[..lenVec].to_vec())
+    let mut send_down: Vec<&str> = Vec::new();
+    if paths.len() > 0 {
+        let len_vec = paths.len() - 1;
+        send_down = paths[..len_vec].to_vec();
+    }
+
+    // checks if the containing dir exists, and if so, returns the full path as handed in.
+    // else errors out
+    match repo_dir_path(root, mk_dir, send_down) {
+        Ok(p) => Ok(repo_path_path(root, paths)),
+        Err(m) => Err(m),
+    }
 }
 
 #[cfg(test)]
@@ -249,5 +266,30 @@ mod path_tests {
         //     Ok(p) =>
         // }
         // assert_ne!(p.to_string_lossy(), "");
+    }
+}
+
+#[cfg(test)]
+mod gitrepo_tests {
+
+    use super::*;
+
+    #[test]
+    fn ThisRepo() {
+        let gr = GitRepository::new(".", false);
+        match gr {
+            Err(e) => {
+                println!("error: {:?}", e);
+            }
+            Ok(_) => (),
+        };
+        // let gr = GitRepository {
+        //     worktree: "",
+        //     gitdir: PathBuf::new(),
+        //     conf: ini::Ini::new(),
+        // };
+
+        // let p = repo_path_gr(&gr, vec![""]);
+        // assert_eq!(p.to_string_lossy(), "");
     }
 }

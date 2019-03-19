@@ -472,22 +472,61 @@ mod gitrepo_tests {
 
     use super::*;
 
+    fn deleteOldRepo() {
+        println!("Deleteing all .\\tt repo");
+        let p = PathBuf::from(".\\tt");
+        if p.exists() {
+            std::fs::remove_dir_all(".\\tt").expect("Failed to delete old git directory");
+        }
+    }
+
     #[test]
-    fn ThisRepo() {
+    fn CreateFromNothing() {
+        deleteOldRepo();
         let gr = GitRepository::repo_create(".\\tt");
         match gr {
             Err(e) => {
                 println!("error: {:?}", e);
             }
-            Ok(_) => (),
+            Ok(_) => {}
         };
-        // let gr = GitRepository {
-        //     worktree: "",
-        //     gitdir: PathBuf::new(),
-        //     conf: ini::Ini::new(),
-        // };
 
-        // let p = repo_path_gr(&gr, vec![""]);
-        // assert_eq!(p.to_string_lossy(), "");
+        let s = std::fs::read_to_string(".\\tt\\.git\\config");
+        assert!(s.unwrap().len() > 0);
+
+        deleteOldRepo();
+    }
+
+    #[test]
+    fn CreateFromEmptyDirectory() {
+        deleteOldRepo();
+        std::fs::create_dir(".\\tt");
+        let gr = GitRepository::repo_create(".\\tt");
+        match gr {
+            Err(e) => {
+                println!("error: {:?}", e);
+            }
+            Ok(_) => {}
+        };
+
+        let s = std::fs::read_to_string(".\\tt\\.git\\config");
+        assert!(s.unwrap().len() > 0);
+
+        deleteOldRepo();
+    }
+
+    #[test]
+    fn FailToCreateBecauseNonEmpty() {
+        deleteOldRepo();
+
+        // create a directory with a file
+        std::fs::create_dir(".\\tt").expect("Tried to create test repo directory, but failed");
+        std::fs::write(".\\tt\\hello.txt", "sup")
+            .expect("Tried to create test repo file, but failed");
+
+        let gr = GitRepository::repo_create(".\\tt");
+        assert!(gr.is_err());
+
+        deleteOldRepo();
     }
 }

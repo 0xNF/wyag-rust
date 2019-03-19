@@ -20,12 +20,16 @@ fn object_read(repo: &GitRepository, sha: &str) -> Result<Box<GitObject>, WyagEr
 
     let raw = match std::fs::read(path) {
         Ok(bv) => bv,
-        Err(m) => return WyagError::new_with_error("Failed to read git object file. This error happened before deflating.", Box::new(m)),
-    }
+        Err(m) => {
+            return Err(WyagError::new_with_error(
+                "Failed to read git object file. This error happened before deflating.",
+                Box::new(m),
+            ));
+        }
+    };
 
     // TODO zlib decompress raw
-    
-    return Ok(Box);
+    Err(WyagError::new("placeholder"))
 }
 
 // TODO not yet implemented

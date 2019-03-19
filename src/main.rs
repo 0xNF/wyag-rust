@@ -1,6 +1,6 @@
 use std::env;
 use std::process;
-mod macros;
+mod lib;
 
 fn main() {
     let config = match Config::new(env::args()) {

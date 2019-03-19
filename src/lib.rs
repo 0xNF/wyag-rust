@@ -1,7 +1,7 @@
 extern crate ini;
 use ini::Ini;
 use std::path::{Path, PathBuf};
-mod wyagError;
+use std::{error::Error, fmt};
 
 /// Git Repository object
 pub struct GitRepository<'a> {
@@ -11,37 +11,35 @@ pub struct GitRepository<'a> {
 }
 
 impl<'a> GitRepository<'a> {
-    pub fn new(path: &'a str, force: bool) -> Result<GitRepository, wyagError::WyagError> {
+    pub fn new(path: &'a str, force: bool) -> Result<GitRepository, WyagError> {
         // Set up the gitdir
         let git_path = Path::new(path).join(".git");
         if !(force || git_path.is_dir()) {
             let serr = "Not a git path";
-            return Err(wyagError::WyagError::new(serr));
+            return Err(WyagError::new(serr));
         }
 
         // Read configuration file in .git/config
-        let git_conf_path = match repo_file_path(&git_path, false, vec!["config"]) {
-            Ok(p) => p,
-            Err(m) => {
-                return Err(wyagError::WyagError::new("Failed to find .git folder"));
-            }
-        };
-
-        // Read if exists
         let mut conf = Ini::new();
-        if git_conf_path.exists() {
-            match Ini::load_from_file(&git_conf_path) {
-                Ok(c) => conf = c,
-                Err(m) => {
-                    return Err(wyagError::WyagError::new_with_error(
-                        "Failed to read git config file",
-                        Box::new(m),
-                    ));
+        match repo_file_path(&git_path, false, vec!["config"]) {
+            Ok(p) => {
+                // Read if exists
+                if p.exists() {
+                    match Ini::load_from_file(&p) {
+                        Ok(c) => conf = c,
+                        Err(m) => {
+                            return Err(WyagError::new_with_error(
+                                "Failed to read git config file",
+                                Box::new(m),
+                            ));
+                        }
+                    };
+                } else if !force {
+                    return Err(WyagError::new("Configuration file missing"));
                 }
-            };
-        } else if !force {
-            return Err(wyagError::WyagError::new("Configuration file missing"));
-        }
+            }
+            Err(_) => (),
+        };
 
         if !force {
             let core = conf
@@ -50,62 +48,72 @@ impl<'a> GitRepository<'a> {
             let repo_format_version = core.get("repositoryformatversion").expect("expected a 'repositoryformatversion' key containing a number under the [core] section, but found nothing");
             let repo_format_version: u32 = repo_format_version.parse().expect("expected 'repositoryformatversion' to contain a valid integer, found an invalid element instead.");
             if repo_format_version != 0 {
-                return Err(wyagError::WyagError::new("Unsupported repo format version"));
+                return Err(WyagError::new("Unsupported repo format version"));
             }
         }
 
-        Ok(GitRepository {
+        let gr = GitRepository {
             worktree: path,
             gitdir: git_path.to_path_buf(),
             conf: conf,
-        })
+        };
+
+        Ok(gr)
     }
 
     /// Creates a new repository at `path`
-    fn repo_create(path: &str) -> Result<GitRepository, wyagError::WyagError> {
+    pub fn repo_create(path: &str) -> Result<GitRepository, WyagError> {
         let repo = GitRepository::new(path, true)?;
 
         // check that repo path is either non-existant, or is an empty dir
         let p: PathBuf = PathBuf::from(repo.worktree);
+        println!("worktree: {}", repo.worktree);
+        // return Ok(repo);
 
         if p.exists() {
+            println!("p exists here, but not before here?...");
+            println!("p.worktree: {:?}", p);
+            // return Ok(repo);
             if p.is_file() {
-                return Err(wyagError::WyagError::new(
+                return Err(WyagError::new(
                     "Cannot create new repository, supplied path is not a directory.",
                 ));
             }
             let mut iter = std::fs::read_dir(p).expect("Failed to read contents of the supplied directory. Do you have permission to view this folder?");
-            if iter.any(|_| true) {
-                return Err(wyagError::WyagError::new(
+            if let Some(_x) = iter.next() {
+                return Err(WyagError::new(
                     "Cannot create new repository, supplied path is not empty.",
                 ));
             }
+            // if iter.any(|_| true) {}
             if let Err(m) = std::fs::create_dir_all(repo.worktree) {
-                return Err(wyagError::WyagError::new(
+                return Err(WyagError::new(
                     "failed to create work directory for supplied repository",
                 ));
             }
         }
 
+        println!("wat the fuk");
+
         if let Err(m) = repo_dir_gr(&repo, true, vec!["branches"]) {
-            return Err(wyagError::WyagError::new(
+            return Err(WyagError::new(
                 "Failed to create directory Branches underneath git main dir",
             ));
         }
         if let Err(m) = repo_dir_gr(&repo, true, vec!["objects"]) {
-            return Err(wyagError::WyagError::new(
+            return Err(WyagError::new(
                 "Failed to create directory objects underneath git main dir",
             ));
         }
 
         if let Err(m) = repo_dir_gr(&repo, true, vec!["refs", "tags"]) {
-            return Err(wyagError::WyagError::new(
+            return Err(WyagError::new(
                 "Failed to create directory refs/tags underneath git main dir",
             ));
         }
 
         if let Err(m) = repo_dir_gr(&repo, true, vec!["refs", "heads"]) {
-            return Err(wyagError::WyagError::new(
+            return Err(WyagError::new(
                 "Failed to create directory refs/heads underneath git main dir",
             ));
         }
@@ -117,11 +125,11 @@ impl<'a> GitRepository<'a> {
                     p,
                     "Unnamed repository; edit this file 'description' to name the repository.\n",
                 ) {
-                    return Err(wyagError::WyagError::new("Failed writing Description file"));
+                    return Err(WyagError::new("Failed writing Description file"));
                 };
             }
             Err(m) => {
-                return Err(wyagError::WyagError::new(
+                return Err(WyagError::new(
                     "Failed to create description file under git main",
                 ));
             }
@@ -131,13 +139,11 @@ impl<'a> GitRepository<'a> {
         match repo_file_gr(&repo, false, vec!["HEAD"]) {
             Ok(p) => {
                 if let Err(m) = std::fs::write(p, "ref: refs/heads/master\n") {
-                    return Err(wyagError::WyagError::new("Failed writing HEAD file"));
+                    return Err(WyagError::new("Failed writing HEAD file"));
                 }
             }
             Err(m) => {
-                return Err(wyagError::WyagError::new(
-                    "Failed to create HEAD file under git main",
-                ));
+                return Err(WyagError::new("Failed to create HEAD file under git main"));
             }
         };
 
@@ -149,7 +155,7 @@ impl<'a> GitRepository<'a> {
                     .expect("Failed to write ini config to file");
             }
             Err(m) => {
-                return Err(wyagError::WyagError::new(
+                return Err(WyagError::new(
                     "Failed to create config file under git main",
                 ));
             }
@@ -212,14 +218,14 @@ fn repo_dir_path(
         if p.is_dir() {
             return Ok(p);
         } else {
-            return Err(Box::new(wyagError::WyagError::new(
+            return Err(Box::new(WyagError::new(
                 "Path already existed as a file. Cannot overwrite file with directory.",
             )));
         }
     }
 
     if mk_dir {
-        let pat: &Path = p.as_path();
+        std::fs::create_dir_all(&p);
         return Ok(p);
     }
 
@@ -260,6 +266,38 @@ fn repo_file_path(
     match repo_dir_path(root, mk_dir, send_down) {
         Ok(p) => Ok(repo_path_path(root, paths)),
         Err(m) => Err(m),
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct WyagError {
+    _message: String,
+}
+
+impl WyagError {
+    pub fn new(message: &str) -> WyagError {
+        WyagError {
+            _message: String::from(message),
+        }
+    }
+
+    /// TODO incorporate err field
+    pub fn new_with_error(message: &str, err: Box<std::error::Error>) -> WyagError {
+        WyagError {
+            _message: String::from(message),
+        }
+    }
+}
+
+impl Error for WyagError {
+    fn description(&self) -> &str {
+        self._message.as_ref()
+    }
+}
+
+impl fmt::Display for WyagError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Failed to do task")
     }
 }
 
@@ -392,7 +430,7 @@ mod gitrepo_tests {
 
     #[test]
     fn ThisRepo() {
-        let gr = GitRepository::new(".", false);
+        let gr = GitRepository::repo_create(".\\tt");
         match gr {
             Err(e) => {
                 println!("error: {:?}", e);

@@ -60,6 +60,122 @@ impl<'a> GitRepository<'a> {
             conf: conf,
         })
     }
+
+    /// Creates a new repository at `path`
+    fn repo_create(path: &str) -> Result<GitRepository, wyagError::WyagError> {
+        let repo = GitRepository::new(path, true)?;
+
+        // check that repo path is either non-existant, or is an empty dir
+        let p: PathBuf = PathBuf::from(repo.worktree);
+
+        if p.exists() {
+            if p.is_file() {
+                return Err(wyagError::WyagError::new(
+                    "Cannot create new repository, supplied path is not a directory.",
+                ));
+            }
+            let mut iter = std::fs::read_dir(p).expect("Failed to read contents of the supplied directory. Do you have permission to view this folder?");
+            if iter.any(|_| true) {
+                return Err(wyagError::WyagError::new(
+                    "Cannot create new repository, supplied path is not empty.",
+                ));
+            }
+            if let Err(m) = std::fs::create_dir_all(repo.worktree) {
+                return Err(wyagError::WyagError::new(
+                    "failed to create work directory for supplied repository",
+                ));
+            }
+        }
+
+        if let Err(m) = repo_dir_gr(&repo, true, vec!["branches"]) {
+            return Err(wyagError::WyagError::new(
+                "Failed to create directory Branches underneath git main dir",
+            ));
+        }
+        if let Err(m) = repo_dir_gr(&repo, true, vec!["objects"]) {
+            return Err(wyagError::WyagError::new(
+                "Failed to create directory objects underneath git main dir",
+            ));
+        }
+
+        if let Err(m) = repo_dir_gr(&repo, true, vec!["refs", "tags"]) {
+            return Err(wyagError::WyagError::new(
+                "Failed to create directory refs/tags underneath git main dir",
+            ));
+        }
+
+        if let Err(m) = repo_dir_gr(&repo, true, vec!["refs", "heads"]) {
+            return Err(wyagError::WyagError::new(
+                "Failed to create directory refs/heads underneath git main dir",
+            ));
+        }
+
+        // .git/description
+        match repo_file_gr(&repo, false, vec!["description"]) {
+            Ok(p) => {
+                if let Err(m) = std::fs::write(
+                    p,
+                    "Unnamed repository; edit this file 'description' to name the repository.\n",
+                ) {
+                    return Err(wyagError::WyagError::new("Failed writing Description file"));
+                };
+            }
+            Err(m) => {
+                return Err(wyagError::WyagError::new(
+                    "Failed to create description file under git main",
+                ));
+            }
+        };
+
+        // .git/HEAD
+        match repo_file_gr(&repo, false, vec!["HEAD"]) {
+            Ok(p) => {
+                if let Err(m) = std::fs::write(p, "ref: refs/heads/master\n") {
+                    return Err(wyagError::WyagError::new("Failed writing HEAD file"));
+                }
+            }
+            Err(m) => {
+                return Err(wyagError::WyagError::new(
+                    "Failed to create HEAD file under git main",
+                ));
+            }
+        };
+
+        // .git/config
+        match repo_file_gr(&repo, false, vec!["config"]) {
+            Ok(p) => {
+                let conf = GitRepository::repo_default_config();
+                conf.write_to_file(p)
+                    .expect("Failed to write ini config to file");
+            }
+            Err(m) => {
+                return Err(wyagError::WyagError::new(
+                    "Failed to create config file under git main",
+                ));
+            }
+        };
+
+        return Ok(repo);
+    }
+
+    /// Returns an ini::Ini representation of the default {path}/.git/config file
+    ///
+    /// Does not write to disk.
+    ///
+    /// `repositoryformatversion` the version of the gitdir format. 0 means the initial format, 1 the same with extensions. If > 1, git will panic; wyag will only accept 0.
+    ///
+    /// `filemode = true`  disables tracking of file mode changes in the work tree.
+    ///
+    /// `bare = false`  indicates that this repository has a worktree. Git supports an optional `worktree` key which indicates the location of the worktree, if not `..`; wyag doesn’t.
+    fn repo_default_config() -> Ini {
+        let mut conf = Ini::new();
+        conf.with_section(Some("core".to_owned()))
+            .set("repositoryformatversion", "0")
+            .set("filemode", "false")
+            .set("bare", "false");
+        // conf.write_to_file("conf.ini").unwrap();
+        conf
+    }
 }
 
 /// Compute path under the repo's gitdir using a GitRepository

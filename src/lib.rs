@@ -67,10 +67,8 @@ impl<'a> GitRepository<'a> {
 
         // check that repo path is either non-existant, or is an empty dir
         let p: PathBuf = PathBuf::from(repo.worktree);
-        // return Ok(repo);
 
         if p.exists() {
-            // return Ok(repo);
             if p.is_file() {
                 return Err(WyagError::new(
                     "Cannot create new repository, supplied path is not a directory.",
@@ -82,10 +80,10 @@ impl<'a> GitRepository<'a> {
                     "Cannot create new repository, supplied path is not empty.",
                 ));
             }
-            // if iter.any(|_| true) {}
             if let Err(m) = std::fs::create_dir_all(repo.worktree) {
-                return Err(WyagError::new(
+                return Err(WyagError::new_with_error(
                     "failed to create work directory for supplied repository",
+                    Box::new(m),
                 ));
             }
         }
@@ -177,6 +175,53 @@ impl<'a> GitRepository<'a> {
         // conf.write_to_file("conf.ini").unwrap();
         conf
     }
+}
+
+/// Looks for a repository, starting at `path` and recursing back until `/`.
+/// To identify something as a repo, checks for the presence of a .git directory.
+///
+/// # examples
+/// repo_find("./", false)  
+///
+///     Ok => None // if no repo is found, but finding one wasn't required  
+///
+/// repo_find("./", true)
+///
+///     Err => ("Failed to find a repository") // if no repo is found, but finding one was required
+///
+/// repo_find("./" [true/false])
+///
+///     Ok => Some(gitrepo) // if a repo was found
+///
+/// repo_find("./", [true/false])
+///
+///     Err("Failed to read directory") // if some error was encountered
+fn repo_find(path: &str, required: bool) -> Result<Option<GitRepository>, WyagError> {
+    let p = PathBuf::from(path);
+    let real = match p.canonicalize() {
+        Ok(p) => p,
+        Err(m) => {
+            return Err(WyagError::new_with_error(
+                "Failed to create canonical path from supplied path",
+                Box::new(m),
+            ));
+        }
+    };
+
+    if p.join(".git").is_dir() {
+        let gr = GitRepository::new(path, false)?;
+        return Ok(Some(gr));
+    }
+
+    // # If we haven't returned, recurse in parent
+    while let Some(p) = real.parent() {
+        if p.join(".git").is_dir() {
+            let gr = GitRepository::new(path, false)?;
+            return Ok(Some(gr));
+        }
+    }
+
+    return Ok(None);
 }
 
 /// Compute path under the repo's gitdir using a GitRepository

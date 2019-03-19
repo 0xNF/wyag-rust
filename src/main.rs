@@ -13,7 +13,10 @@ fn main() {
 
     if config.isInit {
         if let Err(err) = lib::GitRepository::repo_create(&config.path) {
-            eprintln!("{}", "failed to create git repo");
+            eprintln!(
+                "{}",
+                "failed to create git repo, directory already existed and was not empty."
+            );
             process::exit(1)
         }
     }

@@ -67,12 +67,9 @@ impl<'a> GitRepository<'a> {
 
         // check that repo path is either non-existant, or is an empty dir
         let p: PathBuf = PathBuf::from(repo.worktree);
-        println!("worktree: {}", repo.worktree);
         // return Ok(repo);
 
         if p.exists() {
-            println!("p exists here, but not before here?...");
-            println!("p.worktree: {:?}", p);
             // return Ok(repo);
             if p.is_file() {
                 return Err(WyagError::new(
@@ -92,8 +89,6 @@ impl<'a> GitRepository<'a> {
                 ));
             }
         }
-
-        println!("wat the fuk");
 
         if let Err(m) = repo_dir_gr(&repo, true, vec!["branches"]) {
             return Err(WyagError::new(

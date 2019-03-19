@@ -15,10 +15,28 @@ pub trait GitObject {
 
 /// Read object object_id from Git repository repo.  Return a
 /// GitObject whose exact type depends on the object.
-// fn object_read(repo: &GitRepository, sha: &str) -> Result<Box<GitObject>, WyagError> {
-//     let path = repo_file_gr(&repo, false, vec!["objects", &sha[..2], &sha[2..]])?;
-//     return Ok(Box)
-// }
+fn object_read(repo: &GitRepository, sha: &str) -> Result<Box<GitObject>, WyagError> {
+    let path = repo_file_gr(&repo, false, vec!["objects", &sha[..2], &sha[2..]])?;
+
+    let raw = match std::fs::read(path) {
+        Ok(bv) => bv,
+        Err(m) => return WyagError::new_with_error("Failed to read git object file. This error happened before deflating.", Box::new(m)),
+    }
+
+    // TODO zlib decompress raw
+    
+    return Ok(Box);
+}
+
+// TODO not yet implemented
+fn object_find<'a>(
+    repo: &GitRepository,
+    name: &'a str,
+    fmt: &str,
+    follow: bool,
+) -> Option<&'a str> {
+    return Some(name);
+}
 
 /// Git Repository object
 pub struct GitRepository<'a> {

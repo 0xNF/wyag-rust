@@ -265,7 +265,9 @@ fn repo_dir_path(
     }
 
     if mk_dir {
-        std::fs::create_dir_all(&p);
+        if let Err(m) = std::fs::create_dir_all(&p) {
+            return Err(Box::new(m));
+        }
         return Ok(p);
     }
 
@@ -304,7 +306,7 @@ fn repo_file_path(
     // checks if the containing dir exists, and if so, returns the full path as handed in.
     // else errors out
     match repo_dir_path(root, mk_dir, send_down) {
-        Ok(p) => Ok(repo_path_path(root, paths)),
+        Ok(_p) => Ok(repo_path_path(root, paths)),
         Err(m) => Err(m),
     }
 }
@@ -312,19 +314,21 @@ fn repo_file_path(
 #[derive(Debug, Default)]
 pub struct WyagError {
     _message: String,
+    _err: Option<Box<dyn Error>>,
 }
 
 impl WyagError {
     pub fn new(message: &str) -> WyagError {
         WyagError {
             _message: String::from(message),
+            _err: None,
         }
     }
 
-    /// TODO incorporate err field
     pub fn new_with_error(message: &str, err: Box<std::error::Error>) -> WyagError {
         WyagError {
             _message: String::from(message),
+            _err: Some(err),
         }
     }
 }

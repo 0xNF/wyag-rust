@@ -3,6 +3,23 @@ use ini::Ini;
 use std::path::{Path, PathBuf};
 use std::{error::Error, fmt};
 
+/// GitObject trait
+pub trait GitObject {
+    /// This function MUST be implemented by an implementation of `GitObject`.
+    ///
+    /// It must read the object's contents from self.data, a byte string, and do
+    /// whatever it takes to convert it into a meaningful representation.  What exactly that means depend on each subclass.
+    fn serialize(&self) -> Result<(), WyagError>;
+    fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError>;
+}
+
+/// Read object object_id from Git repository repo.  Return a
+/// GitObject whose exact type depends on the object.
+// fn object_read(repo: &GitRepository, sha: &str) -> Result<Box<GitObject>, WyagError> {
+//     let path = repo_file_gr(&repo, false, vec!["objects", &sha[..2], &sha[2..]])?;
+//     return Ok(Box)
+// }
+
 /// Git Repository object
 pub struct GitRepository<'a> {
     worktree: &'a str,
@@ -239,52 +256,41 @@ fn repo_path_path(root: &PathBuf, paths: Vec<&str>) -> PathBuf {
 }
 
 /// Compute path under repo's GitDir using a GitRepository, but creates the directory if mk_dir is true
-fn repo_dir_gr(
-    gr: &GitRepository,
-    mk_dir: bool,
-    paths: Vec<&str>,
-) -> Result<PathBuf, Box<std::error::Error>> {
+fn repo_dir_gr(gr: &GitRepository, mk_dir: bool, paths: Vec<&str>) -> Result<PathBuf, WyagError> {
     repo_dir_path(&gr.gitdir, mk_dir, paths)
 }
 
 /// Compute path under repo's GitDir using a raw path as the root, but creates the directory if mk_dir is true
-fn repo_dir_path(
-    root: &PathBuf,
-    mk_dir: bool,
-    paths: Vec<&str>,
-) -> Result<PathBuf, Box<std::error::Error>> {
+fn repo_dir_path(root: &PathBuf, mk_dir: bool, paths: Vec<&str>) -> Result<PathBuf, WyagError> {
     let p = repo_path_path(root, paths);
     if p.exists() {
         if p.is_dir() {
             return Ok(p);
         } else {
-            return Err(Box::new(WyagError::new(
+            return Err(WyagError::new(
                 "Path already existed as a file. Cannot overwrite file with directory.",
-            )));
+            ));
         }
     }
 
     if mk_dir {
         if let Err(m) = std::fs::create_dir_all(&p) {
-            return Err(Box::new(m));
+            return Err(WyagError::new_with_error(
+                "Couldn't create necessary directories",
+                Box::new(m),
+            ));
         }
         return Ok(p);
     }
 
-    Err(Box::new(std::io::Error::new(
-        std::io::ErrorKind::Other, "Failed to create directory. Didn't exist, but was not given the mk_dir option to create subdirectories"
-    )))
+    return Err(WyagError::new_with_error("Failed to create directories", Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to create directory. Didn't exist, but was not given the mk_dir option to create subdirectories"))));
 }
 
 /// Same as repo_path, but create dirname(*path) if absent.  For
 /// example, repo_file(r, \"refs\" \"remotes\", \"origin\", \"HEAD\") will create
 /// .git/refs/remotes/origin
 /// Uses a GitRepository to start
-fn repo_file_gr(
-    gr: &GitRepository,
-    mk_dir: bool,
-    paths: Vec<&str>,
-) -> Result<PathBuf, Box<std::error::Error>> {
+fn repo_file_gr(gr: &GitRepository, mk_dir: bool, paths: Vec<&str>) -> Result<PathBuf, WyagError> {
     repo_file_path(&gr.gitdir, mk_dir, paths)
 }
 
@@ -292,11 +298,7 @@ fn repo_file_gr(
 /// example, repo_file(r, \"refs\" \"remotes\", \"origin\", \"HEAD\") will create
 /// .git/refs/remotes/origin
 /// Uses a raw path as the root
-fn repo_file_path(
-    root: &PathBuf,
-    mk_dir: bool,
-    paths: Vec<&str>,
-) -> Result<PathBuf, Box<std::error::Error>> {
+fn repo_file_path(root: &PathBuf, mk_dir: bool, paths: Vec<&str>) -> Result<PathBuf, WyagError> {
     let mut send_down: Vec<&str> = Vec::new();
     if paths.len() > 0 {
         let len_vec = paths.len() - 1;
@@ -307,7 +309,10 @@ fn repo_file_path(
     // else errors out
     match repo_dir_path(root, mk_dir, send_down) {
         Ok(_p) => Ok(repo_path_path(root, paths)),
-        Err(m) => Err(m),
+        Err(m) => Err(WyagError::new_with_error(
+            "Failed to create directory path",
+            Box::new(m),
+        )),
     }
 }
 

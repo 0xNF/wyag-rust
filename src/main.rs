@@ -10,6 +10,13 @@ fn main() {
         }
         Ok(c) => c,
     };
+
+    if config.isInit {
+        if let Err(err) = lib::GitRepository::repo_create(&config.path) {
+            eprintln!("{}", err.description());
+            process::exit(1)
+        }
+    }
 }
 
 #[derive(Default, Debug)]

@@ -1,5 +1,8 @@
+extern crate crypto;
 extern crate flate2;
 extern crate ini;
+use crypto::digest::Digest;
+use crypto::sha1;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use ini::Ini;
@@ -206,6 +209,15 @@ fn object_write(obj: &GitObject, actually_write: bool) -> Result<(), WyagError> 
     result.extend(data);
 
     // compute hash
+    let mut out: Vec<u8> = Vec::new();
+    let mut sha = crypto::sha1::Sha1::new();
+    sha.input(&result);
+    sha.result(&mut out);
+
+    // if actually_write {
+    //     // compute path
+    //     let path = repo_file_gr(obj.repo, mk_dir: bool, paths: Vec<&str>)
+    // }
 
     Ok(())
 }

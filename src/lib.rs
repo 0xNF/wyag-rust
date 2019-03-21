@@ -697,3 +697,30 @@ mod gitrepo_tests {
         deleteOldRepo();
     }
 }
+
+#[cfg(test)]
+mod git_object_read_tests {
+
+    use super::*;
+
+    #[test]
+    fn Read_GitCommit_Object_OK() {}
+
+    #[test]
+    fn Read_GitCommit_Object_Fail() {}
+
+    #[test]
+    fn Read_GitTag_Object_Ok() {}
+    #[test]
+    fn Read_GitTag_Object_Fail() {}
+
+    #[test]
+    fn Read_GitTree_Object_Ok() {}
+    #[test]
+    fn Read_GitTree_Object_Fail() {}
+
+    #[test]
+    fn Read_GitBlob_Object_Ok() {}
+    #[test]
+    fn Read_GitBlob_Object_Fail() {}
+}

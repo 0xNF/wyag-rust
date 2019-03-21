@@ -197,7 +197,16 @@ fn object_write(obj: &GitObject, actually_write: bool) -> Result<(), WyagError> 
     let data = obj.serialize()?;
 
     // Add header
-    let result = obj.fmt()
+    let mut result: Vec<u8> = Vec::new();
+    result.extend(obj.fmt());
+    result.extend(vec![b' ']);
+    let us = data.len().to_string().into_bytes();
+    result.extend(us);
+    result.extend(vec![b'\x00']);
+    result.extend(data);
+
+    // compute hash
+
     Ok(())
 }
 

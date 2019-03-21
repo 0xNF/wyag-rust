@@ -20,6 +20,13 @@ fn main() {
             process::exit(1)
         }
     }
+
+    if config.isCatFile {
+        if let Err(err) = lib::cmd_cat_file(config.args[0].as_ref(), config.args[1].as_ref()) {
+            eprintln!("Failed to perform cat-file command\n{}", err);
+            process::exit(1)
+        }
+    }
 }
 
 #[derive(Default, Debug)]
@@ -40,6 +47,7 @@ struct Config {
     isShowRef: bool,
     isTag: bool,
     path: String,
+    args: Vec<String>,
 }
 
 impl Config {
@@ -73,8 +81,36 @@ fn parse_args(args: Vec<String>, c: &mut Config) {
                 process::exit(0)
             }
 
-            "add" | "cat-file" | "checkout" | "commit" | "hash-object" | "log" | "ls-tree"
-            | "merge" | "rebase" | "rev-parse" | "rm" | "show-ref" | "tag" => nyi(arg),
+            "cat-file" => {
+                c.isCatFile = true;
+                let gtype = match args.next() {
+                    Some(s) => s.to_owned(),
+                    None => {
+                        eprintln!("cat-file expects two arguments, received none");
+                        process::exit(1)
+                    }
+                };
+                if gtype != "blob" && gtype != "commit" && gtype != "tag" && gtype != "tree" {
+                    eprintln!(
+                        "first argument to cat-file must be one of [blob, commit, tag, tree]"
+                    );
+                    process::exit(1)
+                }
+
+                let obj = match args.next() {
+                    Some(s) => s.to_owned(),
+                    None => {
+                        eprintln!(
+                            "cat-file expects two arguments, but did not receive a second argument"
+                        );
+                        process::exit(1)
+                    }
+                };
+                c.args = vec![gtype, obj];
+            }
+
+            "add" | "checkout" | "commit" | "hash-object" | "log" | "ls-tree" | "merge"
+            | "rebase" | "rev-parse" | "rm" | "show-ref" | "tag" => nyi(arg),
 
             "init" => {
                 c.isInit = true;

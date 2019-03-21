@@ -31,8 +31,8 @@ pub trait GitObject {
 /// Git Object Concrete Types
 struct GitTag;
 struct GitCommit;
-struct GitBlob {
-    repo: &'static GitRepository<'static>,
+struct GitBlob<'a> {
+    repo: &'a GitRepository<'a>,
     blob_data: Vec<u8>,
 }
 struct GitTree;
@@ -83,8 +83,8 @@ impl GitObject for GitCommit {
     }
 }
 
-impl GitBlob {
-    fn new(repo: &'static GitRepository, bytes: &[u8]) -> GitBlob {
+impl<'a> GitBlob<'a> {
+    fn new(repo: &'a GitRepository, bytes: &[u8]) -> GitBlob<'a> {
         GitBlob {
             blob_data: bytes.to_vec(),
             repo: repo,
@@ -92,7 +92,7 @@ impl GitBlob {
     }
 }
 
-impl GitObject for GitBlob {
+impl<'a> GitObject for GitBlob<'a> {
     fn serialize(&self) -> Result<&[u8], WyagError> {
         Ok(&self.blob_data[..])
     }
@@ -130,7 +130,7 @@ impl GitObject for GitTree {
 /// Read object object_id from Git repository repo.  Return a
 /// GitObject whose exact type depends on the object.
 /// 4.3
-fn object_read(repo: &'static GitRepository, sha: &str) -> Result<Box<GitObject>, WyagError> {
+fn object_read<'a>(repo: &'a GitRepository, sha: &str) -> Result<Box<GitObject + 'a>, WyagError> {
     // grab the object in question from the filesystem
     let path = repo_file_gr(&repo, false, vec!["objects", &sha[..2], &sha[2..]])?;
 
@@ -580,6 +580,41 @@ fn repo_file_path(root: &PathBuf, mk_dir: bool, paths: Vec<&str>) -> Result<Path
     }
 }
 
+pub fn cmd_cat_file(gtype: &str, obj: &str) -> Result<(), WyagError> {
+    let repo = repo_find(".", false)?;
+    cat_file(repo, gtype, obj)
+}
+
+fn cat_file<'a>(repo: Option<GitRepository<'_>>, gtype: &str, obj: &str) -> Result<(), WyagError> {
+    let repo = match repo {
+        Some(gr) => gr,
+        None => {
+            println!("No git repository was found, cannot cat-file");
+            return Ok(());
+        }
+    };
+    let of = match object_find(&repo, obj, gtype, true) {
+        Some(s) => s,
+        None => {
+            println!("no object found for the type: {}", gtype);
+            return Ok(());
+        }
+    };
+    let o = object_read(&repo, of)?;
+    let s = (*o).serialize()?.to_vec();
+    let st = match String::from_utf8(s) {
+        Ok(s) => s,
+        Err(m) => {
+            return Err(WyagError::new_with_error(
+                "Failed to cat file, contained invalid characters",
+                Box::new(m),
+            ));
+        }
+    };
+    println!("{}", st);
+    Ok(())
+}
+
 #[derive(Debug, Default)]
 pub struct WyagError {
     _message: String,
@@ -610,8 +645,19 @@ impl Error for WyagError {
 
 impl fmt::Display for WyagError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Failed to do task")
+        if let Some(e) = &self._err {
+            writeln!(f, "Failed to do task: {}", e)
+        } else {
+            writeln!(f, "Failed to do task")
+        }
     }
+}
+
+#[cfg(test)]
+mod cat_file_tests {
+
+    #[test]
+    fn cat_file() {}
 }
 
 #[cfg(test)]

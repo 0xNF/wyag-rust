@@ -21,6 +21,9 @@ pub trait GitObject {
     fn serialize(&self) -> Result<&[u8], WyagError>;
     fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError>;
     fn fmt(&self) -> &[u8];
+    fn repo(&self) -> &GitRepository {
+        panic!("Not yet implemented")
+    }
 }
 
 /// Git Object Concrete Types
@@ -47,6 +50,10 @@ impl GitObject for GitTag {
     fn fmt(&self) -> &[u8] {
         b"tag"
     }
+
+    // fn repo(&self) -> &GitRepository {
+    //     panic!("Not yet implemented");
+    // }
 }
 
 impl GitCommit {

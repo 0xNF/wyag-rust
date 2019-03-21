@@ -21,7 +21,7 @@ pub trait GitObject {
     /// It must read the object's contents from self.data, a byte string, and do
     /// whatever it takes to convert it into a meaningful representation.  What exactly that means depend on each subclass.
     fn serialize(&self) -> Result<&[u8], WyagError>;
-    fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError>;
+    fn deserialize(&mut self, data: &str) -> Result<(), WyagError>;
     fn fmt(&self) -> &[u8];
     fn repo(&self) -> &GitRepository {
         panic!("Not yet implemented")
@@ -31,7 +31,10 @@ pub trait GitObject {
 /// Git Object Concrete Types
 struct GitTag;
 struct GitCommit;
-struct GitBlob;
+struct GitBlob {
+    repo: &'static GitRepository<'static>,
+    blob_data: Vec<u8>,
+}
 struct GitTree;
 
 impl GitTag {
@@ -45,7 +48,7 @@ impl GitObject for GitTag {
         Err(WyagError::new("Serialize on GitTag not yet implenented"))
     }
 
-    fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError> {
+    fn deserialize(&mut self, data: &str) -> Result<(), WyagError> {
         Err(WyagError::new("Deserialize on GitTag not yet implemented"))
     }
 
@@ -69,7 +72,7 @@ impl GitObject for GitCommit {
         Err(WyagError::new("Serialize on GitCommit not yet implenented"))
     }
 
-    fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError> {
+    fn deserialize(&mut self, data: &str) -> Result<(), WyagError> {
         Err(WyagError::new(
             "Deserialize on GitCommit not yet implemented",
         ))
@@ -81,18 +84,22 @@ impl GitObject for GitCommit {
 }
 
 impl GitBlob {
-    fn new(repo: &GitRepository, bytes: &[u8]) -> GitBlob {
-        GitBlob // TODO NYI
+    fn new(repo: &'static GitRepository, bytes: &[u8]) -> GitBlob {
+        GitBlob {
+            blob_data: bytes.to_vec(),
+            repo: repo,
+        }
     }
 }
 
 impl GitObject for GitBlob {
     fn serialize(&self) -> Result<&[u8], WyagError> {
-        Err(WyagError::new("Serialize on GitBlob not yet implenented"))
+        Ok(&self.blob_data[..])
     }
 
-    fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError> {
-        Err(WyagError::new("Deserialize on GitBlob not yet implemented"))
+    fn deserialize(&mut self, data: &str) -> Result<(), WyagError> {
+        self.blob_data = data.as_bytes().to_vec();
+        Ok(())
     }
 
     fn fmt(&self) -> &[u8] {
@@ -111,7 +118,7 @@ impl GitObject for GitTree {
         Err(WyagError::new("Serialize on GitTree not yet implenented"))
     }
 
-    fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError> {
+    fn deserialize(&mut self, data: &str) -> Result<(), WyagError> {
         Err(WyagError::new("Deserialize on GitTree not yet implemented"))
     }
 
@@ -123,7 +130,7 @@ impl GitObject for GitTree {
 /// Read object object_id from Git repository repo.  Return a
 /// GitObject whose exact type depends on the object.
 /// 4.3
-fn object_read(repo: &GitRepository, sha: &str) -> Result<Box<GitObject>, WyagError> {
+fn object_read(repo: &'static GitRepository, sha: &str) -> Result<Box<GitObject>, WyagError> {
     // grab the object in question from the filesystem
     let path = repo_file_gr(&repo, false, vec!["objects", &sha[..2], &sha[2..]])?;
 

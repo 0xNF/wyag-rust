@@ -5,9 +5,11 @@ use crypto::digest::Digest;
 use crypto::sha1;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use ini::Ini;
 use std::io;
 use std::io::Read;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str;
 use std::{error::Error, fmt};
@@ -202,7 +204,7 @@ fn decode_reader(bytes: Vec<u8>) -> std::io::Result<Vec<u8>> {
 
 /// Writes the GitObject to its appropriate location in the repo
 /// 4.4
-fn object_write(obj: &GitObject, actually_write: bool) -> Result<(), WyagError> {
+fn object_write(obj: &GitObject, actually_write: bool) -> Result<String, WyagError> {
     // serialize the data
     let data = obj.serialize()?;
 
@@ -216,17 +218,53 @@ fn object_write(obj: &GitObject, actually_write: bool) -> Result<(), WyagError> 
     result.extend(data);
 
     // compute hash
-    let mut out: Vec<u8> = Vec::new();
     let mut sha = crypto::sha1::Sha1::new();
     sha.input(&result);
-    sha.result(&mut out);
+    let outStr = sha.result_str();
 
-    // if actually_write {
-    //     // compute path
-    //     let path = repo_file_gr(obj.repo, mk_dir: bool, paths: Vec<&str>)
-    // }
+    if actually_write {
+        // compute path
+        let path = repo_file_gr(
+            obj.repo(),
+            true,
+            vec!["objects", &outStr[..2], &outStr[2..]],
+        )?;
 
-    Ok(())
+        let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
+        match e.write_all(&result) {
+            Ok(_) => (),
+            Err(m) => {
+                return Err(WyagError::new_with_error(
+                    "failed to zlib compress object",
+                    Box::new(m),
+                ));
+            }
+        };
+
+        let compressed_bytes = match e.finish() {
+            Ok(bytes) => bytes,
+            Err(m) => {
+                return Err(WyagError::new_with_error(
+                    "Failed to finish zlib compressing object",
+                    Box::new(m),
+                ));
+            }
+        };
+
+        let compressed_byte_str = "TODO FIXME";
+        // TODO get a string from the compressed bytes
+        match std::fs::write(path, compressed_byte_str) {
+            Ok(_) => (),
+            Err(m) => {
+                return Err(WyagError::new_with_error(
+                    "Failed to write GitObject to file. See inner error for more information.",
+                    Box::new(m),
+                ));
+            }
+        };
+    }
+
+    Ok(outStr);
 }
 
 // TODO not yet implemented

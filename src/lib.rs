@@ -1,6 +1,12 @@
+extern crate flate2;
 extern crate ini;
+use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
 use ini::Ini;
+use std::io;
+use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::str;
 use std::{error::Error, fmt};
 
 /// GitObject trait
@@ -13,23 +19,157 @@ pub trait GitObject {
     fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError>;
 }
 
+/// Git Object Concrete Types
+struct GitTag;
+struct GitCommit;
+struct GitBlob;
+struct GitTree;
+
+impl GitTag {
+    fn new(repo: &GitRepository, bytes: &[u8]) -> GitTag {
+        GitTag // TODO NYI
+    }
+}
+
+impl GitObject for GitTag {
+    fn serialize(&self) -> Result<(), WyagError> {
+        Err(WyagError::new("Serialize on GitTag not yet implenented"))
+    }
+
+    fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError> {
+        Err(WyagError::new("Deserialize on GitTag not yet implemented"))
+    }
+}
+
+impl GitCommit {
+    fn new(repo: &GitRepository, bytes: &[u8]) -> GitCommit {
+        GitCommit // TODO NYI
+    }
+}
+
+impl GitObject for GitCommit {
+    fn serialize(&self) -> Result<(), WyagError> {
+        Err(WyagError::new("Serialize on GitCommit not yet implenented"))
+    }
+
+    fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError> {
+        Err(WyagError::new(
+            "Deserialize on GitCommit not yet implemented",
+        ))
+    }
+}
+
+impl GitBlob {
+    fn new(repo: &GitRepository, bytes: &[u8]) -> GitBlob {
+        GitBlob // TODO NYI
+    }
+}
+
+impl GitObject for GitBlob {
+    fn serialize(&self) -> Result<(), WyagError> {
+        Err(WyagError::new("Serialize on GitBlob not yet implenented"))
+    }
+
+    fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError> {
+        Err(WyagError::new("Deserialize on GitBlob not yet implemented"))
+    }
+}
+
+impl GitTree {
+    fn new(repo: &GitRepository, bytes: &[u8]) -> GitTree {
+        GitTree // TODO NYI
+    }
+}
+
+impl GitObject for GitTree {
+    fn serialize(&self) -> Result<(), WyagError> {
+        Err(WyagError::new("Serialize on GitTree not yet implenented"))
+    }
+
+    fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError> {
+        Err(WyagError::new("Deserialize on GitTree not yet implemented"))
+    }
+}
+
 /// Read object object_id from Git repository repo.  Return a
 /// GitObject whose exact type depends on the object.
 fn object_read(repo: &GitRepository, sha: &str) -> Result<Box<GitObject>, WyagError> {
+    // grab the object in question from the filesystem
     let path = repo_file_gr(&repo, false, vec!["objects", &sha[..2], &sha[2..]])?;
 
+    // read the raw bytes of the file.
     let raw = match std::fs::read(path) {
         Ok(bv) => bv,
         Err(m) => {
             return Err(WyagError::new_with_error(
-                "Failed to read git object file. This error happened before deflating.",
+                format!(
+                    "Failed to read git object file {}. This error happened before deflating.",
+                    sha
+                )
+                .as_ref(),
                 Box::new(m),
             ));
         }
     };
 
-    // TODO zlib decompress raw
-    Err(WyagError::new("placeholder"))
+    // decode the zlib enconded data
+    let decoded = match decode_reader(raw) {
+        Ok(s) => s,
+        Err(m) => {
+            return Err(WyagError::new_with_error(
+                format!("Failed to decode ZLIB encoded byte array: {0}", sha).as_ref(),
+                Box::new(m),
+            ));
+        }
+    };
+
+    // read the object type
+    let xIdx = match decoded.iter().position(|&r| r == b' ') {
+        Some(i) => i,
+        None => return Err(WyagError::new(
+            format!("Failed decode git object type {}- no space delimeter was found. Is this file corrupted?", sha).as_ref(),
+        )),
+    };
+
+    // read and validate object size
+    let yIdx = match decoded.iter().position(|&r| r == b'\x00') {
+        Some(i) => i,
+        None => return Err(WyagError::new(
+            format!("Failed decode git object type {} - no null delimeter was found. Is this file corrupted?", sha).as_ref(),
+        )),
+    };
+
+    let size = str::from_utf8(&decoded[xIdx..yIdx]).unwrap(); // todo wyag error here
+    let size: usize = size.parse().unwrap(); // todo wyag error here
+    if size != decoded.len() - (yIdx - 1) {
+        return Err(WyagError::new(
+            format!("Malformed object {}, bad length.", sha).as_ref(),
+        ));
+    }
+
+    let dfmt = &decoded[..xIdx];
+
+    let mut c: Box<GitObject>;
+    match dfmt {
+        b"commit" => c = Box::new(GitCommit::new(repo, &decoded[yIdx + 1..])),
+        b"tree" => c = Box::new(GitTree::new(repo, &decoded[yIdx + 1..])),
+        b"tag" => c = Box::new(GitTag::new(repo, &decoded[yIdx + 1..])),
+        b"blob" => c = Box::new(GitBlob::new(repo, &decoded[yIdx + 1..])),
+        _ => {
+            return Err(WyagError::new(
+                format!("Unknown type {} for object {}", "", sha).as_ref(), // todo fromat for dfmt
+            ));
+        }
+    };
+
+    Ok(c)
+}
+
+fn decode_reader(bytes: Vec<u8>) -> std::io::Result<Vec<u8>> {
+    let mut z = ZlibDecoder::new(&bytes[..]);
+    let mut byteBuf: Vec<u8> = Vec::new();
+    z.read_exact(&mut byteBuf)?;
+    Ok(byteBuf)
 }
 
 // TODO not yet implemented

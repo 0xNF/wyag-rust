@@ -264,7 +264,7 @@ fn object_write(obj: &GitObject, actually_write: bool) -> Result<String, WyagErr
         };
     }
 
-    Ok(outStr);
+    Ok(outStr)
 }
 
 // TODO not yet implemented

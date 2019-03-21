@@ -15,7 +15,7 @@ pub trait GitObject {
     ///
     /// It must read the object's contents from self.data, a byte string, and do
     /// whatever it takes to convert it into a meaningful representation.  What exactly that means depend on each subclass.
-    fn serialize(&self) -> Result<(), WyagError>;
+    fn serialize(&self) -> Result<&[u8], WyagError>;
     fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError>;
     fn fmt(&self) -> &[u8];
 }
@@ -33,7 +33,7 @@ impl GitTag {
 }
 
 impl GitObject for GitTag {
-    fn serialize(&self) -> Result<(), WyagError> {
+    fn serialize(&self) -> Result<&[u8], WyagError> {
         Err(WyagError::new("Serialize on GitTag not yet implenented"))
     }
 
@@ -53,7 +53,7 @@ impl GitCommit {
 }
 
 impl GitObject for GitCommit {
-    fn serialize(&self) -> Result<(), WyagError> {
+    fn serialize(&self) -> Result<&[u8], WyagError> {
         Err(WyagError::new("Serialize on GitCommit not yet implenented"))
     }
 
@@ -75,7 +75,7 @@ impl GitBlob {
 }
 
 impl GitObject for GitBlob {
-    fn serialize(&self) -> Result<(), WyagError> {
+    fn serialize(&self) -> Result<&[u8], WyagError> {
         Err(WyagError::new("Serialize on GitBlob not yet implenented"))
     }
 
@@ -95,7 +95,7 @@ impl GitTree {
 }
 
 impl GitObject for GitTree {
-    fn serialize(&self) -> Result<(), WyagError> {
+    fn serialize(&self) -> Result<&[u8], WyagError> {
         Err(WyagError::new("Serialize on GitTree not yet implenented"))
     }
 
@@ -110,6 +110,7 @@ impl GitObject for GitTree {
 
 /// Read object object_id from Git repository repo.  Return a
 /// GitObject whose exact type depends on the object.
+/// 4.3
 fn object_read(repo: &GitRepository, sha: &str) -> Result<Box<GitObject>, WyagError> {
     // grab the object in question from the filesystem
     let path = repo_file_gr(&repo, false, vec!["objects", &sha[..2], &sha[2..]])?;
@@ -196,7 +197,7 @@ fn object_write(obj: &GitObject, actually_write: bool) -> Result<(), WyagError> 
     let data = obj.serialize()?;
 
     // Add header
-    // let result =
+    let result = obj.fmt()
     Ok(())
 }
 

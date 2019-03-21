@@ -17,6 +17,7 @@ pub trait GitObject {
     /// whatever it takes to convert it into a meaningful representation.  What exactly that means depend on each subclass.
     fn serialize(&self) -> Result<(), WyagError>;
     fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError>;
+    fn fmt(&self) -> &[u8];
 }
 
 /// Git Object Concrete Types
@@ -39,6 +40,10 @@ impl GitObject for GitTag {
     fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError> {
         Err(WyagError::new("Deserialize on GitTag not yet implemented"))
     }
+
+    fn fmt(&self) -> &[u8] {
+        b"tag"
+    }
 }
 
 impl GitCommit {
@@ -57,6 +62,10 @@ impl GitObject for GitCommit {
             "Deserialize on GitCommit not yet implemented",
         ))
     }
+
+    fn fmt(&self) -> &[u8] {
+        b"commit"
+    }
 }
 
 impl GitBlob {
@@ -73,6 +82,10 @@ impl GitObject for GitBlob {
     fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError> {
         Err(WyagError::new("Deserialize on GitBlob not yet implemented"))
     }
+
+    fn fmt(&self) -> &[u8] {
+        b"blob"
+    }
 }
 
 impl GitTree {
@@ -88,6 +101,10 @@ impl GitObject for GitTree {
 
     fn deserialize(&self, data: &str) -> Result<Box<GitObject>, WyagError> {
         Err(WyagError::new("Deserialize on GitTree not yet implemented"))
+    }
+
+    fn fmt(&self) -> &[u8] {
+        b"tree"
     }
 }
 
@@ -170,6 +187,17 @@ fn decode_reader(bytes: Vec<u8>) -> std::io::Result<Vec<u8>> {
     let mut byteBuf: Vec<u8> = Vec::new();
     z.read_exact(&mut byteBuf)?;
     Ok(byteBuf)
+}
+
+/// Writes the GitObject to its appropriate location in the repo
+/// 4.4
+fn object_write(obj: &GitObject, actually_write: bool) -> Result<(), WyagError> {
+    // serialize the data
+    let data = obj.serialize()?;
+
+    // Add header
+    // let result =
+    Ok(())
 }
 
 // TODO not yet implemented

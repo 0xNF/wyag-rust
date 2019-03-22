@@ -762,6 +762,31 @@ fn kvlm_parse(
     kvlm_parse(raw, end + 1, dict)
 }
 
+fn kvlm_serialize(hm: LinkedHashMap<String, Vec<String>>) -> String {
+    let mut ret = "".to_owned();
+    let mut main = String::new();
+
+    // Output Fields
+    for (k, v) in hm.iter() {
+        // Skip the message itself
+        if k == "" {
+            main = v[0];
+            continue;
+        }
+        for val in v {
+            ret.push_str(" ");
+            ret.push_str(val.replace("\n", "\n ").as_ref());
+            ret.push('\n');
+        }
+    }
+
+    // append message
+    ret.push('\n');
+    ret.push_str(main.as_ref());
+
+    ret
+}
+
 #[cfg(test)]
 mod parse_log_tests {
     use super::*;

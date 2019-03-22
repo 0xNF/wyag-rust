@@ -1,12 +1,14 @@
 extern crate crypto;
 extern crate flate2;
 extern crate ini;
+extern crate linked_hash_map;
 use crypto::digest::Digest;
 use crypto::sha1;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use ini::Ini;
+use linked_hash_map::LinkedHashMap;
 use std::collections::hash_map::HashMap;
 use std::io;
 use std::io::Read;
@@ -692,8 +694,8 @@ fn hash_object<'a>(
 fn kvlm_parse(
     raw: Vec<u8>,
     start: usize,
-    dict: &mut HashMap<String, Vec<String>>,
-) -> &HashMap<String, Vec<String>> {
+    dict: &mut LinkedHashMap<String, Vec<String>>,
+) -> &LinkedHashMap<String, Vec<String>> {
     // Finding the first space
     let space = raw.iter().skip(start).position(|&r| r == b' ');
 
@@ -712,7 +714,7 @@ fn kvlm_parse(
         let key = "".to_owned();
         let value = match str::from_utf8(&raw[start + 1..]) {
             Ok(s) => s.to_owned(),
-            Err(m) => panic!("Failed to find a space"),
+            Err(m) => return dict,
         };
         dict.insert(key, vec![value]);
         return dict;
@@ -758,6 +760,19 @@ fn kvlm_parse(
     }
 
     kvlm_parse(raw, end + 1, dict)
+}
+
+#[cfg(test)]
+mod parse_log_tests {
+    use super::*;
+
+    #[test]
+    fn parse_empty_log() {
+        let s = "";
+        let mut hm: LinkedHashMap<String, Vec<String>> = LinkedHashMap::new();
+        kvlm_parse(s.as_bytes().to_vec(), 0, &mut hm);
+        assert_eq!(hm.len(), 0);
+    }
 }
 
 /// EndRegion: Log

@@ -27,11 +27,16 @@ fn main() {
     } else if config.isHashObject {
         let isW: bool = config.args[0]
             .parse()
-            .expect("Failed to perform hashs-object: somehow the -w flag was misinterpreted as a non-boolean");
+            .expect("Failed to perform hash-object: somehow the -w flag was misinterpreted as a non-boolean");
         if let Err(err) =
             lib::cmd_hash_object(isW, config.args[1].as_ref(), config.args[2].as_ref())
         {
             eprintln!("Failed to perform hash-object\n{}", err);
+            process::exit(1)
+        }
+    } else if config.isLog {
+        if let Err(err) = lib::cmd_log(config.args[0].as_ref()) {
+            eprintln!("Failed to perform log: {}", err);
             process::exit(1)
         }
     }
@@ -115,6 +120,7 @@ fn parse_args(args: Vec<String>, c: &mut Config) {
                     }
                 };
                 c.args = vec![gtype, obj];
+                break;
             }
 
             "hash-object" => {
@@ -156,10 +162,21 @@ fn parse_args(args: Vec<String>, c: &mut Config) {
                 }
 
                 c.args = vec![isW.to_string(), gitType, path];
+                break;
             }
 
-            "add" | "checkout" | "commit" | "log" | "ls-tree" | "merge" | "rebase"
-            | "rev-parse" | "rm" | "show-ref" | "tag" => nyi(arg),
+            "log" => {
+                let commit = match args.next() {
+                    Some(s) => s,
+                    None => "HEAD",
+                };
+                c.isLog = true;
+                c.args.push(commit.to_owned());
+                break;
+            }
+
+            "add" | "checkout" | "commit" | "ls-tree" | "merge" | "rebase" | "rev-parse" | "rm"
+            | "show-ref" | "tag" => nyi(arg),
 
             "init" => {
                 c.isInit = true;

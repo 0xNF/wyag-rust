@@ -700,6 +700,45 @@ fn hash_object<'a>(
 
 /// Region: Log
 
+pub fn cmd_log(commit: &str) -> Result<(), WyagError> {
+    let repo = match repo_find(".", false)? {
+        Some(gr) => gr,
+        None => {
+            println!("No repository was found, cannot use wyag-log");
+            return Ok(());
+        }
+    };
+
+    println!("digraph wyaglog{{");
+    let o = object_find(&repo, commit, "blob", true);
+    if let None = o {
+        println!("No such object: {}", commit);
+    }
+    let mut v: Vec<&str> = Vec::new();
+    log_digraphviz(&repo, o.unwrap(), &mut v)?;
+    println!("}}");
+    Ok(())
+}
+
+fn log_digraphviz<'a>(
+    repo: &GitRepository,
+    sha: &'a str,
+    seen: &mut Vec<&'a str>,
+) -> Result<(), WyagError> {
+    if seen.contains(&sha) {
+        return Ok(());
+    }
+    seen.push(sha);
+    let commit = object_read(repo, sha)?;
+    assert_eq!((*commit).fmt(), b"commit");
+
+    // Base case: the initial commit.
+    // let cc = (*commit).kvlm;
+    // if (*commit).kvlm.
+
+    Ok(())
+}
+
 fn kvlm_parse(
     raw: Vec<u8>,
     start: usize,

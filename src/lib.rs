@@ -84,7 +84,7 @@ impl<'a> GitCommit<'a> {
 impl<'a> GitObject for GitCommit<'a> {
     fn serialize(&self) -> Result<&[u8], WyagError> {
         let x = kvlm_serialize(&self.kvlm);
-        let bs = &x.as_bytes().to_owned()[..];
+        let bs = &x.as_bytes().to_vec().to_owned()[..];
         Ok(bs)
     }
 

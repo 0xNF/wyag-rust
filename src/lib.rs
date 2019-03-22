@@ -770,7 +770,7 @@ fn kvlm_serialize(hm: LinkedHashMap<String, Vec<String>>) -> String {
     for (k, v) in hm.iter() {
         // Skip the message itself
         if k == "" {
-            main = v[0];
+            main = String::from(v[0].as_ref());
             continue;
         }
         for val in v {

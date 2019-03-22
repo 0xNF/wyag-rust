@@ -643,28 +643,37 @@ pub fn cmd_hash_object(actually_write: bool, gtype: &str, path: &str) -> Result<
     Ok(())
 }
 
-fn hash_object(
+fn hash_object<'a>(
     fd: &mut std::fs::File,
     gitType: &str,
-    repo: Option<GitRepository>,
+    repo: Option<GitRepository<'_>>,
 ) -> Result<String, WyagError> {
     let mut bytes: Vec<u8> = Vec::new();
-    let data = fd.read_to_end(&mut bytes);
+    match fd.read_to_end(&mut bytes) {
+        Ok(_) => (),
+        Err(m) => {
+            return Err(WyagError::new_with_error(
+                "Failed to perform hash-object",
+                Box::new(m),
+            ));
+        }
+    };
+    let bytes = bytes.as_slice();
 
-    // let mut c: Box<GitObject>;
-    // match gitType {
-    //     "commit" => c = Box::new(GitCommit::new(repo, &decoded[yIdx + 1..])),
-    //     "tree" => c = Box::new(GitTree::new(repo, &decoded[yIdx + 1..])),
-    //     "tag" => c = Box::new(GitTag::new(repo, &decoded[yIdx + 1..])),
-    //     "blob" => c = Box::new(GitBlob::new(repo, &decoded[yIdx + 1..])),
-    //     _ => {
-    //         return Err(WyagError::new(
-    //             format!("Unknown type {} for object {}", "", sha).as_ref(), // todo fromat for dfmt
-    //         ));
-    //     }
-    // };
+    let mut c: Box<GitObject>;
+    match gitType {
+        "commit" => c = Box::new(GitCommit::new(repo.as_ref(), bytes)),
+        "tree" => c = Box::new(GitTree::new(repo.as_ref(), bytes)),
+        "tag" => c = Box::new(GitTag::new(repo.as_ref(), bytes)),
+        "blob" => c = Box::new(GitBlob::new(repo.as_ref(), bytes)),
+        _ => {
+            return Err(WyagError::new(
+                format!("Unknown type {}!", gitType).as_ref(),
+            ));
+        }
+    };
 
-    Ok(String::from("placeholder"))
+    object_write(&*c, true)
 }
 
 #[derive(Debug, Default)]

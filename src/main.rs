@@ -19,11 +19,19 @@ fn main() {
             );
             process::exit(1)
         }
-    }
-
-    if config.isCatFile {
+    } else if config.isCatFile {
         if let Err(err) = lib::cmd_cat_file(config.args[0].as_ref(), config.args[1].as_ref()) {
             eprintln!("Failed to perform cat-file command\n{}", err);
+            process::exit(1)
+        }
+    } else if config.isHashObject {
+        let isW: bool = config.args[0]
+            .parse()
+            .expect("Failed to perform hashs-object: somehow the -w flag was misinterpreted as a non-boolean");
+        if let Err(err) =
+            lib::cmd_hash_object(isW, config.args[1].as_ref(), config.args[2].as_ref())
+        {
+            eprintln!("Failed to perform hash-object\n{}", err);
             process::exit(1)
         }
     }
@@ -109,8 +117,49 @@ fn parse_args(args: Vec<String>, c: &mut Config) {
                 c.args = vec![gtype, obj];
             }
 
-            "add" | "checkout" | "commit" | "hash-object" | "log" | "ls-tree" | "merge"
-            | "rebase" | "rev-parse" | "rm" | "show-ref" | "tag" => nyi(arg),
+            "hash-object" => {
+                let mut path = String::from("x");
+                let mut isW = false;
+                let mut gitType = String::from("blob");
+                c.isHashObject = true;
+                while let Some(subarg) = args.next() {
+                    match subarg.as_ref() {
+                        "-w" => {
+                            isW = true;
+                        }
+
+                        "-t" => {
+                            let gtype = match args.next() {
+                                Some(s) => s.to_owned(),
+                                None => {
+                                    eprintln!("if -t is supplied, a second parameter of [blob, commit, tag, tree] must follow");
+                                    process::exit(1)
+                                }
+                            };
+                            if gtype != "blob"
+                                && gtype != "commit"
+                                && gtype != "tag"
+                                && gtype != "tree"
+                            {
+                                eprintln!(
+                                "first argument after -t must be one of [blob, commit, tag, tree]"
+                            );
+                                process::exit(1)
+                            }
+                            gitType = gtype;
+                        }
+
+                        rest => {
+                            path = String::from(rest);
+                        }
+                    }
+                }
+
+                c.args = vec![isW.to_string(), gitType, path];
+            }
+
+            "add" | "checkout" | "commit" | "log" | "ls-tree" | "merge" | "rebase"
+            | "rev-parse" | "rm" | "show-ref" | "tag" => nyi(arg),
 
             "init" => {
                 c.isInit = true;

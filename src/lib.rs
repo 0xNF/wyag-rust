@@ -23,27 +23,33 @@ pub trait GitObject {
     fn serialize(&self) -> Result<&[u8], WyagError>;
     fn deserialize(&mut self, data: &str) -> Result<(), WyagError>;
     fn fmt(&self) -> &[u8];
-    fn repo(&self) -> &GitRepository {
+    fn repo(&self) -> Option<&GitRepository> {
         panic!("Not yet implemented")
     }
 }
 
 /// Git Object Concrete Types
-struct GitTag;
-struct GitCommit;
+struct GitTag<'a> {
+    repo: Option<&'a GitRepository<'a>>,
+}
+struct GitCommit<'a> {
+    repo: Option<&'a GitRepository<'a>>,
+}
 struct GitBlob<'a> {
-    repo: &'a GitRepository<'a>,
+    repo: Option<&'a GitRepository<'a>>,
     blob_data: Vec<u8>,
 }
-struct GitTree;
+struct GitTree<'a> {
+    repo: Option<&'a GitRepository<'a>>,
+}
 
-impl GitTag {
-    fn new(repo: &GitRepository, bytes: &[u8]) -> GitTag {
-        GitTag // TODO NYI
+impl<'a> GitTag<'a> {
+    fn new(repo: Option<&'a GitRepository>, bytes: &[u8]) -> GitTag<'a> {
+        GitTag { repo: repo } // TODO NYI
     }
 }
 
-impl GitObject for GitTag {
+impl<'a> GitObject for GitTag<'a> {
     fn serialize(&self) -> Result<&[u8], WyagError> {
         Err(WyagError::new("Serialize on GitTag not yet implenented"))
     }
@@ -61,13 +67,13 @@ impl GitObject for GitTag {
     // }
 }
 
-impl GitCommit {
-    fn new(repo: &GitRepository, bytes: &[u8]) -> GitCommit {
-        GitCommit // TODO NYI
+impl<'a> GitCommit<'a> {
+    fn new(repo: Option<&'a GitRepository>, bytes: &[u8]) -> GitCommit<'a> {
+        GitCommit { repo: repo } // TODO NYI
     }
 }
 
-impl GitObject for GitCommit {
+impl<'a> GitObject for GitCommit<'a> {
     fn serialize(&self) -> Result<&[u8], WyagError> {
         Err(WyagError::new("Serialize on GitCommit not yet implenented"))
     }
@@ -84,7 +90,7 @@ impl GitObject for GitCommit {
 }
 
 impl<'a> GitBlob<'a> {
-    fn new(repo: &'a GitRepository, bytes: &[u8]) -> GitBlob<'a> {
+    fn new(repo: Option<&'a GitRepository>, bytes: &[u8]) -> GitBlob<'a> {
         GitBlob {
             blob_data: bytes.to_vec(),
             repo: repo,
@@ -107,13 +113,13 @@ impl<'a> GitObject for GitBlob<'a> {
     }
 }
 
-impl GitTree {
-    fn new(repo: &GitRepository, bytes: &[u8]) -> GitTree {
-        GitTree // TODO NYI
+impl<'a> GitTree<'a> {
+    fn new(repo: Option<&'a GitRepository>, bytes: &[u8]) -> GitTree<'a> {
+        GitTree { repo: repo } // TODO NYI
     }
 }
 
-impl GitObject for GitTree {
+impl<'a> GitObject for GitTree<'a> {
     fn serialize(&self) -> Result<&[u8], WyagError> {
         Err(WyagError::new("Serialize on GitTree not yet implenented"))
     }
@@ -188,10 +194,10 @@ fn object_read<'a>(repo: &'a GitRepository, sha: &str) -> Result<Box<GitObject +
 
     let mut c: Box<GitObject>;
     match dfmt {
-        b"commit" => c = Box::new(GitCommit::new(repo, &decoded[yIdx + 1..])),
-        b"tree" => c = Box::new(GitTree::new(repo, &decoded[yIdx + 1..])),
-        b"tag" => c = Box::new(GitTag::new(repo, &decoded[yIdx + 1..])),
-        b"blob" => c = Box::new(GitBlob::new(repo, &decoded[yIdx + 1..])),
+        b"commit" => c = Box::new(GitCommit::new(Some(repo), &decoded[yIdx + 1..])),
+        b"tree" => c = Box::new(GitTree::new(Some(repo), &decoded[yIdx + 1..])),
+        b"tag" => c = Box::new(GitTag::new(Some(repo), &decoded[yIdx + 1..])),
+        b"blob" => c = Box::new(GitBlob::new(Some(repo), &decoded[yIdx + 1..])),
         _ => {
             return Err(WyagError::new(
                 format!("Unknown type {} for object {}", "", sha).as_ref(), // todo fromat for dfmt
@@ -232,7 +238,7 @@ fn object_write(obj: &GitObject, actually_write: bool) -> Result<String, WyagErr
     if actually_write {
         // compute path
         let path = repo_file_gr(
-            obj.repo(),
+            obj.repo().unwrap(),
             true,
             vec!["objects", &outStr[..2], &outStr[2..]],
         )?;
@@ -613,6 +619,52 @@ fn cat_file<'a>(repo: Option<GitRepository<'_>>, gtype: &str, obj: &str) -> Resu
     };
     println!("{}", st);
     Ok(())
+}
+
+pub fn cmd_hash_object(actually_write: bool, gtype: &str, path: &str) -> Result<(), WyagError> {
+    let mut grOpt: Option<GitRepository> = None;
+    if actually_write {
+        let repo = GitRepository::new(".", false)?;
+        grOpt = Some(repo);
+    }
+
+    let mut fd = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(m) => {
+            return Err(WyagError::new_with_error(
+                "Failed to open file at specified path for hash-object",
+                Box::new(m),
+            ));
+        }
+    };
+
+    let sha1 = hash_object(&mut fd, gtype, grOpt)?;
+    println!("{}", sha1);
+    Ok(())
+}
+
+fn hash_object(
+    fd: &mut std::fs::File,
+    gitType: &str,
+    repo: Option<GitRepository>,
+) -> Result<String, WyagError> {
+    let mut bytes: Vec<u8> = Vec::new();
+    let data = fd.read_to_end(&mut bytes);
+
+    // let mut c: Box<GitObject>;
+    // match gitType {
+    //     "commit" => c = Box::new(GitCommit::new(repo, &decoded[yIdx + 1..])),
+    //     "tree" => c = Box::new(GitTree::new(repo, &decoded[yIdx + 1..])),
+    //     "tag" => c = Box::new(GitTag::new(repo, &decoded[yIdx + 1..])),
+    //     "blob" => c = Box::new(GitBlob::new(repo, &decoded[yIdx + 1..])),
+    //     _ => {
+    //         return Err(WyagError::new(
+    //             format!("Unknown type {} for object {}", "", sha).as_ref(), // todo fromat for dfmt
+    //         ));
+    //     }
+    // };
+
+    Ok(String::from("placeholder"))
 }
 
 #[derive(Debug, Default)]

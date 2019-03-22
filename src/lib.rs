@@ -23,7 +23,7 @@ pub trait GitObject {
     ///
     /// It must read the object's contents from self.data, a byte string, and do
     /// whatever it takes to convert it into a meaningful representation.  What exactly that means depend on each subclass.
-    fn serialize(&self) -> Result<&[u8], WyagError>;
+    fn serialize(&self) -> Result<Vec<u8>, WyagError>;
     fn deserialize(&mut self, data: &str) -> Result<(), WyagError>;
     fn fmt(&self) -> &[u8];
     fn repo(&self) -> Option<&GitRepository> {
@@ -38,6 +38,7 @@ struct GitTag<'a> {
 struct GitCommit<'a> {
     repo: Option<&'a GitRepository<'a>>,
     kvlm: LinkedHashMap<String, Vec<String>>,
+    _data: Vec<u8>,
 }
 
 struct GitBlob<'a> {
@@ -55,7 +56,7 @@ impl<'a> GitTag<'a> {
 }
 
 impl<'a> GitObject for GitTag<'a> {
-    fn serialize(&self) -> Result<&[u8], WyagError> {
+    fn serialize(&self) -> Result<Vec<u8>, WyagError> {
         Err(WyagError::new("Serialize on GitTag not yet implenented"))
     }
 
@@ -77,15 +78,17 @@ impl<'a> GitCommit<'a> {
         GitCommit {
             repo: repo,
             kvlm: LinkedHashMap::default(),
+            _data: bytes.to_vec(),
         } // TODO NYI
     }
 }
 
 impl<'a> GitObject for GitCommit<'a> {
-    fn serialize(&self) -> Result<&[u8], WyagError> {
-        let x = kvlm_serialize(&self.kvlm);
-        let bs = &x.as_bytes().to_vec().to_owned()[..];
-        Ok(bs)
+    fn serialize(&self) -> Result<Vec<u8>, WyagError> {
+        // let x = kvlm_serialize(&self.kvlm);
+        // let bs = x.as_bytes().to_vec().to_owned();
+        let x = kvlm_serialize(&self.kvlm).into_bytes();
+        Ok(x)
     }
 
     fn deserialize(&mut self, data: &str) -> Result<(), WyagError> {
@@ -110,8 +113,8 @@ impl<'a> GitBlob<'a> {
 }
 
 impl<'a> GitObject for GitBlob<'a> {
-    fn serialize(&self) -> Result<&[u8], WyagError> {
-        Ok(&self.blob_data[..])
+    fn serialize(&self) -> Result<Vec<u8>, WyagError> {
+        Ok(self.blob_data.to_owned())
     }
 
     fn deserialize(&mut self, data: &str) -> Result<(), WyagError> {
@@ -131,7 +134,7 @@ impl<'a> GitTree<'a> {
 }
 
 impl<'a> GitObject for GitTree<'a> {
-    fn serialize(&self) -> Result<&[u8], WyagError> {
+    fn serialize(&self) -> Result<Vec<u8>, WyagError> {
         Err(WyagError::new("Serialize on GitTree not yet implenented"))
     }
 

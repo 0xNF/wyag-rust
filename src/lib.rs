@@ -7,6 +7,7 @@ use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use ini::Ini;
+use std::collections::hash_map::HashMap;
 use std::io;
 use std::io::Read;
 use std::io::Write;
@@ -131,163 +132,6 @@ impl<'a> GitObject for GitTree<'a> {
     fn fmt(&self) -> &[u8] {
         b"tree"
     }
-}
-
-/// Read object object_id from Git repository repo.  Return a
-/// GitObject whose exact type depends on the object.
-/// 4.3
-fn object_read<'a>(repo: &'a GitRepository, sha: &str) -> Result<Box<GitObject + 'a>, WyagError> {
-    // grab the object in question from the filesystem
-    let path = repo_file_gr(&repo, false, vec!["objects", &sha[..2], &sha[2..]])?;
-
-    // read the raw bytes of the file.
-    let raw = match std::fs::read(path) {
-        Ok(bv) => bv,
-        Err(m) => {
-            return Err(WyagError::new_with_error(
-                format!(
-                    "Failed to read git object file {}. This error happened before deflating.",
-                    sha
-                )
-                .as_ref(),
-                Box::new(m),
-            ));
-        }
-    };
-
-    // decode the zlib enconded data
-    let decoded = match decode_reader(raw) {
-        Ok(s) => s,
-        Err(m) => {
-            return Err(WyagError::new_with_error(
-                format!("Failed to decode ZLIB encoded byte array: {0}", sha).as_ref(),
-                Box::new(m),
-            ));
-        }
-    };
-
-    // read the object type
-    let xIdx = match decoded.iter().position(|&r| r == b' ') {
-        Some(i) => i,
-        None => return Err(WyagError::new(
-            format!("Failed decode git object type {}- no space delimeter was found. Is this file corrupted?", sha).as_ref(),
-        )),
-    };
-
-    // read and validate object size
-    let yIdx = match decoded.iter().position(|&r| r == b'\x00') {
-        Some(i) => i,
-        None => return Err(WyagError::new(
-            format!("Failed decode git object type {} - no null delimeter was found. Is this file corrupted?", sha).as_ref(),
-        )),
-    };
-
-    let size = str::from_utf8(&decoded[xIdx..yIdx]).unwrap(); // todo wyag error here
-    let size: usize = size.parse().unwrap(); // todo wyag error here
-    if size != decoded.len() - (yIdx - 1) {
-        return Err(WyagError::new(
-            format!("Malformed object {}, bad length.", sha).as_ref(),
-        ));
-    }
-
-    let dfmt = &decoded[..xIdx];
-
-    let mut c: Box<GitObject>;
-    match dfmt {
-        b"commit" => c = Box::new(GitCommit::new(Some(repo), &decoded[yIdx + 1..])),
-        b"tree" => c = Box::new(GitTree::new(Some(repo), &decoded[yIdx + 1..])),
-        b"tag" => c = Box::new(GitTag::new(Some(repo), &decoded[yIdx + 1..])),
-        b"blob" => c = Box::new(GitBlob::new(Some(repo), &decoded[yIdx + 1..])),
-        _ => {
-            return Err(WyagError::new(
-                format!("Unknown type {} for object {}", "", sha).as_ref(), // todo fromat for dfmt
-            ));
-        }
-    };
-
-    Ok(c)
-}
-
-fn decode_reader(bytes: Vec<u8>) -> std::io::Result<Vec<u8>> {
-    let mut z = ZlibDecoder::new(&bytes[..]);
-    let mut byteBuf: Vec<u8> = Vec::new();
-    z.read_exact(&mut byteBuf)?;
-    Ok(byteBuf)
-}
-
-/// Writes the GitObject to its appropriate location in the repo
-/// 4.4
-fn object_write(obj: &GitObject, actually_write: bool) -> Result<String, WyagError> {
-    // serialize the data
-    let data = obj.serialize()?;
-
-    // Add header
-    let mut result: Vec<u8> = Vec::new();
-    result.extend(obj.fmt());
-    result.extend(vec![b' ']);
-    let us = data.len().to_string().into_bytes();
-    result.extend(us);
-    result.extend(vec![b'\x00']);
-    result.extend(data);
-
-    // compute hash
-    let mut sha = crypto::sha1::Sha1::new();
-    sha.input(&result);
-    let outStr = sha.result_str();
-
-    if actually_write {
-        // compute path
-        let path = repo_file_gr(
-            obj.repo().unwrap(),
-            true,
-            vec!["objects", &outStr[..2], &outStr[2..]],
-        )?;
-
-        let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
-        match e.write_all(&result) {
-            Ok(_) => (),
-            Err(m) => {
-                return Err(WyagError::new_with_error(
-                    "failed to zlib compress object",
-                    Box::new(m),
-                ));
-            }
-        };
-
-        let compressed_bytes = match e.finish() {
-            Ok(bytes) => bytes,
-            Err(m) => {
-                return Err(WyagError::new_with_error(
-                    "Failed to finish zlib compressing object",
-                    Box::new(m),
-                ));
-            }
-        };
-
-        let compressed_byte_str = "TODO FIXME";
-        // TODO get a string from the compressed bytes
-        match std::fs::write(path, compressed_byte_str) {
-            Ok(_) => (),
-            Err(m) => {
-                return Err(WyagError::new_with_error(
-                    "Failed to write GitObject to file. See inner error for more information.",
-                    Box::new(m),
-                ));
-            }
-        };
-    }
-
-    Ok(outStr)
-}
-
-// TODO not yet implemented
-fn object_find<'a>(
-    repo: &GitRepository,
-    name: &'a str,
-    fmt: &str,
-    follow: bool,
-) -> Option<&'a str> {
-    return Some(name);
 }
 
 /// Git Repository object
@@ -464,6 +308,10 @@ impl<'a> GitRepository<'a> {
     }
 }
 
+// EndRegion: GitRepository
+
+// Region: RepoPaths
+
 /// Looks for a repository, starting at `path` and recursing back until `/`.
 /// To identify something as a repo, checks for the presence of a .git directory.
 ///
@@ -586,6 +434,167 @@ fn repo_file_path(root: &PathBuf, mk_dir: bool, paths: Vec<&str>) -> Result<Path
     }
 }
 
+// EndRegion: RepoPaths
+
+// Region: Reading/Writing Objects
+
+/// Read object object_id from Git repository repo.  Return a
+/// GitObject whose exact type depends on the object.
+/// 4.3
+fn object_read<'a>(repo: &'a GitRepository, sha: &str) -> Result<Box<GitObject + 'a>, WyagError> {
+    // grab the object in question from the filesystem
+    let path = repo_file_gr(&repo, false, vec!["objects", &sha[..2], &sha[2..]])?;
+
+    // read the raw bytes of the file.
+    let raw = match std::fs::read(path) {
+        Ok(bv) => bv,
+        Err(m) => {
+            return Err(WyagError::new_with_error(
+                format!(
+                    "Failed to read git object file {}. This error happened before deflating.",
+                    sha
+                )
+                .as_ref(),
+                Box::new(m),
+            ));
+        }
+    };
+
+    // decode the zlib enconded data
+    let decoded = match decode_reader(raw) {
+        Ok(s) => s,
+        Err(m) => {
+            return Err(WyagError::new_with_error(
+                format!("Failed to decode ZLIB encoded byte array: {0}", sha).as_ref(),
+                Box::new(m),
+            ));
+        }
+    };
+
+    // read the object type
+    let xIdx = match decoded.iter().position(|&r| r == b' ') {
+        Some(i) => i,
+        None => return Err(WyagError::new(
+            format!("Failed decode git object type {}- no space delimeter was found. Is this file corrupted?", sha).as_ref(),
+        )),
+    };
+
+    // read and validate object size
+    let yIdx = match decoded.iter().position(|&r| r == b'\x00') {
+        Some(i) => i,
+        None => return Err(WyagError::new(
+            format!("Failed decode git object type {} - no null delimeter was found. Is this file corrupted?", sha).as_ref(),
+        )),
+    };
+
+    let size = str::from_utf8(&decoded[xIdx..yIdx]).unwrap(); // todo wyag error here
+    let size: usize = size.parse().unwrap(); // todo wyag error here
+    if size != decoded.len() - (yIdx - 1) {
+        return Err(WyagError::new(
+            format!("Malformed object {}, bad length.", sha).as_ref(),
+        ));
+    }
+
+    let dfmt = &decoded[..xIdx];
+
+    let mut c: Box<GitObject>;
+    match dfmt {
+        b"commit" => c = Box::new(GitCommit::new(Some(repo), &decoded[yIdx + 1..])),
+        b"tree" => c = Box::new(GitTree::new(Some(repo), &decoded[yIdx + 1..])),
+        b"tag" => c = Box::new(GitTag::new(Some(repo), &decoded[yIdx + 1..])),
+        b"blob" => c = Box::new(GitBlob::new(Some(repo), &decoded[yIdx + 1..])),
+        _ => {
+            return Err(WyagError::new(
+                format!("Unknown type {} for object {}", "", sha).as_ref(), // todo fromat for dfmt
+            ));
+        }
+    };
+
+    Ok(c)
+}
+
+fn decode_reader(bytes: Vec<u8>) -> std::io::Result<Vec<u8>> {
+    let mut z = ZlibDecoder::new(&bytes[..]);
+    let mut byteBuf: Vec<u8> = Vec::new();
+    z.read_exact(&mut byteBuf)?;
+    Ok(byteBuf)
+}
+
+/// Writes the GitObject to its appropriate location in the repo
+/// 4.4
+fn object_write(obj: &GitObject, actually_write: bool) -> Result<String, WyagError> {
+    // serialize the data
+    let data = obj.serialize()?;
+
+    // Add header
+    let mut result: Vec<u8> = Vec::new();
+    result.extend(obj.fmt());
+    result.extend(vec![b' ']);
+    let us = data.len().to_string().into_bytes();
+    result.extend(us);
+    result.extend(vec![b'\x00']);
+    result.extend(data);
+
+    // compute hash
+    let mut sha = crypto::sha1::Sha1::new();
+    sha.input(&result);
+    let outStr = sha.result_str();
+
+    if actually_write {
+        // compute path
+        let path = repo_file_gr(
+            obj.repo().unwrap(),
+            true,
+            vec!["objects", &outStr[..2], &outStr[2..]],
+        )?;
+
+        let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
+        match e.write_all(&result) {
+            Ok(_) => (),
+            Err(m) => {
+                return Err(WyagError::new_with_error(
+                    "failed to zlib compress object",
+                    Box::new(m),
+                ));
+            }
+        };
+
+        let compressed_bytes = match e.finish() {
+            Ok(bytes) => bytes,
+            Err(m) => {
+                return Err(WyagError::new_with_error(
+                    "Failed to finish zlib compressing object",
+                    Box::new(m),
+                ));
+            }
+        };
+
+        let compressed_byte_str = "TODO FIXME";
+        // TODO get a string from the compressed bytes
+        match std::fs::write(path, compressed_byte_str) {
+            Ok(_) => (),
+            Err(m) => {
+                return Err(WyagError::new_with_error(
+                    "Failed to write GitObject to file. See inner error for more information.",
+                    Box::new(m),
+                ));
+            }
+        };
+    }
+
+    Ok(outStr)
+}
+
+// TODO not yet implemented
+fn object_find<'a>(
+    repo: &GitRepository,
+    name: &'a str,
+    fmt: &str,
+    follow: bool,
+) -> Option<&'a str> {
+    return Some(name);
+}
+
 pub fn cmd_cat_file(gtype: &str, obj: &str) -> Result<(), WyagError> {
     let repo = repo_find(".", false)?;
     cat_file(repo, gtype, obj)
@@ -675,6 +684,83 @@ fn hash_object<'a>(
 
     object_write(&*c, true)
 }
+
+// EndRegion: Reading/Writing Objects
+
+/// Region: Log
+
+fn kvlm_parse(
+    raw: Vec<u8>,
+    start: usize,
+    dict: &mut HashMap<String, Vec<String>>,
+) -> &HashMap<String, Vec<String>> {
+    // Finding the first space
+    let space = raw.iter().skip(start).position(|&r| r == b' ');
+
+    // Finding the first newline
+    let newline = raw.iter().skip(start).position(|&r| r == b'\n');
+
+    // If a space appears before a newline, we have a new Key value
+
+    // Base Case
+    // ====
+    // If newline appears first, (or there is no space at all, in which case return -1),
+    // we assume a blank line. A blank line means the remainder of the data is the message
+
+    if space.is_none() || newline.unwrap() < space.unwrap() {
+        assert_eq!(newline.unwrap(), start);
+        let key = "".to_owned();
+        let value = match str::from_utf8(&raw[start + 1..]) {
+            Ok(s) => s.to_owned(),
+            Err(m) => panic!("Failed to find a space"),
+        };
+        dict.insert(key, vec![value]);
+        return dict;
+    }
+
+    // Recursive Case
+    // ===
+    // We read the key-value pair and recurse for the next
+    let key = match str::from_utf8(&raw[start..space.unwrap()]) {
+        Ok(s) => s.to_owned(),
+        Err(m) => {
+            panic!("Failed to parse key in kvlm");
+            // return Err(WyagError::new_with_error(
+            //     "Failed to parse key in kvlm",
+            //     Box::new(m),
+            // ));
+        }
+    };
+
+    // Find the end of the value.  Continuation lines begin with a
+    // space, so we loop until we find a "\n" not followed by a space.
+    let mut end = start;
+    loop {
+        match raw.iter().skip(end + 1).position(|&r| r == b'\n') {
+            Some(i) => end = i,
+            None => break,
+        }
+        if raw[end + 1] != b' ' {
+            break;
+        }
+    }
+
+    // Grab the value
+    // Also, drop the leading space on continuation lines
+    let rVal = raw[space.unwrap() + 1..end].to_vec();
+    let mut value: String = String::from_utf8(rVal).unwrap();
+    value = value.replace("\n ", "\n");
+
+    // Don't overwrite values
+    if dict.contains_key(&key) {
+        let x = dict.get_mut(&key).unwrap();
+        x.push(String::from(value));
+    }
+
+    kvlm_parse(raw, end + 1, dict)
+}
+
+/// EndRegion: Log
 
 #[derive(Debug, Default)]
 pub struct WyagError {

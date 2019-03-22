@@ -37,7 +37,9 @@ struct GitTag<'a> {
 }
 struct GitCommit<'a> {
     repo: Option<&'a GitRepository<'a>>,
+    kvlm: LinkedHashMap<String, Vec<String>>,
 }
+
 struct GitBlob<'a> {
     repo: Option<&'a GitRepository<'a>>,
     blob_data: Vec<u8>,
@@ -72,19 +74,25 @@ impl<'a> GitObject for GitTag<'a> {
 
 impl<'a> GitCommit<'a> {
     fn new(repo: Option<&'a GitRepository>, bytes: &[u8]) -> GitCommit<'a> {
-        GitCommit { repo: repo } // TODO NYI
+        GitCommit {
+            repo: repo,
+            kvlm: LinkedHashMap::default(),
+        } // TODO NYI
     }
 }
 
 impl<'a> GitObject for GitCommit<'a> {
     fn serialize(&self) -> Result<&[u8], WyagError> {
-        Err(WyagError::new("Serialize on GitCommit not yet implenented"))
+        let x = kvlm_serialize(&self.kvlm);
+        let bs = &x.as_bytes().to_owned()[..];
+        Ok(bs)
     }
 
     fn deserialize(&mut self, data: &str) -> Result<(), WyagError> {
-        Err(WyagError::new(
-            "Deserialize on GitCommit not yet implemented",
-        ))
+        let mut hm: LinkedHashMap<String, Vec<String>> = LinkedHashMap::new();
+        kvlm_parse(data.as_bytes().to_vec(), 0, &mut hm);
+        self.kvlm = hm;
+        Ok(())
     }
 
     fn fmt(&self) -> &[u8] {
@@ -762,7 +770,7 @@ fn kvlm_parse(
     kvlm_parse(raw, end + 1, dict)
 }
 
-fn kvlm_serialize(hm: LinkedHashMap<String, Vec<String>>) -> String {
+fn kvlm_serialize(hm: &LinkedHashMap<String, Vec<String>>) -> String {
     let mut ret = "".to_owned();
     let mut main = String::new();
 

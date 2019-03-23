@@ -727,30 +727,42 @@ pub fn cmd_log(commit: &str) -> Result<(), WyagError> {
     if let None = o {
         println!("No such object: {}", commit);
     }
-    let mut v: Vec<&str> = Vec::new();
-    log_digraphviz(&repo, o.unwrap(), &mut v)?;
+    let mut v: Vec<String> = Vec::new();
+    log_graphviz(&repo, String::from(o.unwrap()), &mut v)?;
     println!("}}");
     Ok(())
 }
 
-fn log_digraphviz<'a>(
+fn log_graphviz<'a>(
     repo: &GitRepository,
-    sha: &'a str,
-    seen: &mut Vec<&'a str>,
+    sha: String,
+    seen: &mut Vec<String>,
 ) -> Result<(), WyagError> {
     if seen.contains(&sha) {
         return Ok(());
     }
+    let sha2 = sha.clone();
     seen.push(sha);
-    let commit: GitCommit = match object_read(repo, sha)? {
+    let commit: GitCommit = match object_read(repo, sha2.as_ref())? {
         GObj::Commit(y) => y,
         _ => return Err(WyagError::new("??")),
     };
-    // assert_eq!((*commit).fmt(), b"commit");
 
-    // Base case: the initial commit.
-    let cc = commit.kvlm;
-    // if (*commit).kvlm.
+    /* Base Case: the initial commit. */
+    let cc = commit.kvlm.clone();
+    if !commit.kvlm.contains_key("parent") {
+        return Ok(());
+    }
+
+    /* Recurse Case */
+    let parents = cc["parents"].clone();
+    for p in parents {
+        println!("c_{} -> c_{}", sha2, &p);
+        match log_graphviz(repo, p, seen) {
+            Ok(_) => (),
+            Err(m) => return Err(m),
+        };
+    }
 
     Ok(())
 }

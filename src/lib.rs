@@ -31,6 +31,13 @@ pub trait GitObject {
     }
 }
 
+enum GObj<'a> {
+    Tag(GitTag<'a>),
+    Commit(GitCommit<'a>),
+    Blob(GitBlob<'a>),
+    Tree(GitTree<'a>),
+}
+
 /// Git Object Concrete Types
 struct GitTag<'a> {
     repo: Option<&'a GitRepository<'a>>,
@@ -452,7 +459,7 @@ fn repo_file_path(root: &PathBuf, mk_dir: bool, paths: Vec<&str>) -> Result<Path
 /// Read object object_id from Git repository repo.  Return a
 /// GitObject whose exact type depends on the object.
 /// 4.3
-fn object_read<'a>(repo: &'a GitRepository, sha: &str) -> Result<Box<GitObject + 'a>, WyagError> {
+fn object_read<'a>(repo: &'a GitRepository, sha: &str) -> Result<GObj<'a>, WyagError> {
     // grab the object in question from the filesystem
     let path = repo_file_gr(&repo, false, vec!["objects", &sha[..2], &sha[2..]])?;
 
@@ -508,12 +515,12 @@ fn object_read<'a>(repo: &'a GitRepository, sha: &str) -> Result<Box<GitObject +
 
     let dfmt = &decoded[..xIdx];
 
-    let mut c: Box<GitObject>;
+    let mut c: GObj;
     match dfmt {
-        b"commit" => c = Box::new(GitCommit::new(Some(repo), &decoded[yIdx + 1..])),
-        b"tree" => c = Box::new(GitTree::new(Some(repo), &decoded[yIdx + 1..])),
-        b"tag" => c = Box::new(GitTag::new(Some(repo), &decoded[yIdx + 1..])),
-        b"blob" => c = Box::new(GitBlob::new(Some(repo), &decoded[yIdx + 1..])),
+        b"commit" => c = GObj::Commit(GitCommit::new(Some(repo), &decoded[yIdx + 1..])),
+        b"tree" => c = GObj::Tree(GitTree::new(Some(repo), &decoded[yIdx + 1..])),
+        b"tag" => c = GObj::Tag(GitTag::new(Some(repo), &decoded[yIdx + 1..])),
+        b"blob" => c = GObj::Blob(GitBlob::new(Some(repo), &decoded[yIdx + 1..])),
         _ => {
             return Err(WyagError::new(
                 format!("Unknown type {} for object {}", "", sha).as_ref(), // todo fromat for dfmt
@@ -626,7 +633,13 @@ fn cat_file<'a>(repo: Option<GitRepository<'_>>, gtype: &str, obj: &str) -> Resu
             return Ok(());
         }
     };
-    let o = object_read(&repo, of)?;
+    let o: Box<dyn GitObject> = match object_read(&repo, of)? {
+        GObj::Blob(x) => Box::new(x),
+        GObj::Commit(y) => Box::new(y),
+        GObj::Tag(z) => Box::new(z),
+        GObj::Tree(a) => Box::new(a),
+        _ => return Err(WyagError::new("??")),
+    };
     let s = (*o).serialize()?.to_vec();
     let st = match String::from_utf8(s) {
         Ok(s) => s,
@@ -729,11 +742,14 @@ fn log_digraphviz<'a>(
         return Ok(());
     }
     seen.push(sha);
-    let commit = object_read(repo, sha)?;
-    assert_eq!((*commit).fmt(), b"commit");
+    let commit: GitCommit = match object_read(repo, sha)? {
+        GObj::Commit(y) => y,
+        _ => return Err(WyagError::new("??")),
+    };
+    // assert_eq!((*commit).fmt(), b"commit");
 
     // Base case: the initial commit.
-    // let cc = (*commit).kvlm;
+    let cc = commit.kvlm;
     // if (*commit).kvlm.
 
     Ok(())

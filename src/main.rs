@@ -39,6 +39,11 @@ fn main() {
             eprintln!("Failed to perform log: {}", err);
             process::exit(1)
         }
+    } else if config.isLsTree {
+        if let Err(err) = lib::cmd_ls_tree(config.args[0].as_ref()) {
+            eprintln!("Failed to perform ls-tree: {}", err);
+            process::exit(1)
+        }
     }
 }
 
@@ -175,7 +180,20 @@ fn parse_args(args: Vec<String>, c: &mut Config) {
                 break;
             }
 
-            "add" | "checkout" | "commit" | "ls-tree" | "merge" | "rebase" | "rev-parse" | "rm"
+            "ls-tree" => {
+                let sha = match args.next() {
+                    Some(s) => s.to_owned(),
+                    None => {
+                        eprintln!("ls-tree takes a mandatory argument. requires the sha of the item to query.");
+                        process::exit(1)
+                    }
+                };
+                c.args.push(sha);
+                c.isLsTree = true;
+                break;
+            }
+
+            "add" | "checkout" | "commit" | "merge" | "rebase" | "rev-parse" | "rm"
             | "show-ref" | "tag" => nyi(arg),
 
             "init" => {

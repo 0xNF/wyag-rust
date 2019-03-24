@@ -24,7 +24,7 @@ pub trait GitObject {
     /// It must read the object's contents from self.data, a byte string, and do
     /// whatever it takes to convert it into a meaningful representation.  What exactly that means depend on each subclass.
     fn serialize(&self) -> Result<Vec<u8>, WyagError>;
-    fn deserialize(&mut self, data: &str) -> Result<(), WyagError>;
+    fn deserialize(&mut self, data: Vec<u8>) -> Result<(), WyagError>;
     fn fmt(&self) -> &[u8];
     fn repo(&self) -> Option<&GitRepository> {
         panic!("Not yet implemented")
@@ -54,6 +54,7 @@ struct GitBlob<'a> {
 }
 struct GitTree<'a> {
     repo: Option<&'a GitRepository<'a>>,
+    items: Vec<GitTreeLeaf>,
 }
 
 impl<'a> GitTag<'a> {
@@ -67,7 +68,7 @@ impl<'a> GitObject for GitTag<'a> {
         Err(WyagError::new("Serialize on GitTag not yet implenented"))
     }
 
-    fn deserialize(&mut self, data: &str) -> Result<(), WyagError> {
+    fn deserialize(&mut self, data: Vec<u8>) -> Result<(), WyagError> {
         Err(WyagError::new("Deserialize on GitTag not yet implemented"))
     }
 
@@ -96,9 +97,9 @@ impl<'a> GitObject for GitCommit<'a> {
         Ok(x)
     }
 
-    fn deserialize(&mut self, data: &str) -> Result<(), WyagError> {
+    fn deserialize(&mut self, data: Vec<u8>) -> Result<(), WyagError> {
         let mut hm: LinkedHashMap<String, Vec<String>> = LinkedHashMap::new();
-        kvlm_parse(data.as_bytes().to_vec(), 0, &mut hm);
+        kvlm_parse(data, 0, &mut hm);
         self.kvlm = hm;
         Ok(())
     }
@@ -122,8 +123,8 @@ impl<'a> GitObject for GitBlob<'a> {
         Ok(self.blob_data.to_owned())
     }
 
-    fn deserialize(&mut self, data: &str) -> Result<(), WyagError> {
-        self.blob_data = data.as_bytes().to_vec();
+    fn deserialize(&mut self, data: Vec<u8>) -> Result<(), WyagError> {
+        self.blob_data = data;
         Ok(())
     }
 
@@ -134,17 +135,22 @@ impl<'a> GitObject for GitBlob<'a> {
 
 impl<'a> GitTree<'a> {
     fn new(repo: Option<&'a GitRepository>, bytes: &[u8]) -> GitTree<'a> {
-        GitTree { repo: repo } // TODO NYI
+        GitTree {
+            repo: repo,
+            items: Vec::new(),
+        }
     }
 }
 
 impl<'a> GitObject for GitTree<'a> {
     fn serialize(&self) -> Result<Vec<u8>, WyagError> {
-        Err(WyagError::new("Serialize on GitTree not yet implenented"))
+        tree_serialize(&self)
     }
 
-    fn deserialize(&mut self, data: &str) -> Result<(), WyagError> {
-        Err(WyagError::new("Deserialize on GitTree not yet implemented"))
+    fn deserialize(&mut self, data: Vec<u8>) -> Result<(), WyagError> {
+        let v = tree_parse(data.as_ref())?;
+        self.items = v;
+        Ok(())
     }
 
     fn fmt(&self) -> &[u8] {
@@ -877,6 +883,225 @@ mod parse_log_tests {
 }
 
 /// EndRegion: Log
+
+/// Region: Tree
+
+struct GitTreeLeaf {
+    mode: Vec<u8>,
+    path: Vec<u8>,
+    sha: String,
+}
+
+fn tree_parse_one(raw: &[u8], start: usize) -> Result<(usize, GitTreeLeaf), WyagError> {
+    /* Find the space terminator for the File Mode */
+    let x = match raw.iter().skip(start).position(|&r| r == b' ') {
+        Some(i) => i,
+        None => {
+            return Err(WyagError::new(
+                "no space found in raw byte stream of tree parse",
+            ));
+        }
+    };
+    assert!(x - start == 5 || x - start == 6);
+
+    /* Read the File Mode */
+    let mode = raw[start..x].to_vec();
+
+    /* Find the NULL terminator for the path */
+    let y = match raw.iter().skip(start).position(|&r| r == b'\x00') {
+        Some(i) => i,
+        None => {
+            return Err(WyagError::new(
+                "no null terminator found in raw byte stream of tree parse",
+            ));
+        }
+    };
+
+    /* and read the path */
+    let path = raw[x + 1..y].to_vec();
+
+    /* read the SHA1 and convert to a hex string */
+    let sha_raw = raw[y + 1..y + 21].to_vec();
+    let sha_u32 = sha_parse_u32(&sha_raw);
+    let sha_str = sha_parse_str(sha_u32);
+
+    let pos = y + 21;
+    let data: GitTreeLeaf = GitTreeLeaf {
+        mode: mode,
+        path: path,
+        sha: sha_str,
+    };
+    Ok((pos, data))
+}
+
+fn tree_parse(raw: &[u8]) -> Result<Vec<GitTreeLeaf>, WyagError> {
+    let mut pos: usize = 0;
+    let max: usize = raw.len();
+    let mut v: Vec<GitTreeLeaf> = Vec::new();
+
+    while pos < max {
+        let (pos_m, data) = tree_parse_one(raw, pos)?;
+        pos += pos_m;
+        v.push(data);
+    }
+
+    Ok(v)
+}
+
+fn tree_serialize(tree: &GitTree) -> Result<Vec<u8>, WyagError> {
+    let mut ret: Vec<u8> = Vec::new();
+
+    for g in &tree.items {
+        ret.extend(g.mode.iter());
+        ret.push(b' ');
+        ret.extend(g.path.iter());
+        ret.push(b'\x00');
+        let i = u32::from_str_radix(&g.sha, 16);
+    }
+
+    Ok(ret)
+}
+
+/// TODO TEST ME
+fn sha_parse_u32(v: &Vec<u8>) -> u32 {
+    let mut buff: [u8; 4] = [0, 0, 0, 0];
+    let mut sha: u32 = 0;
+    for (i, byte) in v.iter().enumerate() {
+        if i % 4 == 0 {
+            sha += u32::from_be_bytes(buff);
+            buff = [0, 0, 0, 0];
+        }
+        buff[i % 4] = *byte;
+    }
+    sha
+}
+
+/// TODO TEST ME
+fn sha_parse_str(i: u32) -> String {
+    format!("{:x}", i)
+}
+
+pub fn cmd_ls_tree(name: &str) -> Result<(), WyagError> {
+    let repo = match repo_find(".", false)? {
+        Some(gr) => gr,
+        None => {
+            println!("No repository was found, cannot use wyag-log");
+            return Ok(());
+        }
+    };
+
+    let of = match object_find(&repo, name, "tree", true) {
+        Some(s) => s,
+        None => {
+            println!("no object found for the type: {}", "tree");
+            return Ok(());
+        }
+    };
+    let tree: GitTree = match object_read(&repo, of)? {
+        GObj::Tree(a) => a,
+        _ => {
+            return Err(WyagError::new(
+                "Expected to retrieve a Tree, but received some other type instead",
+            ));
+        }
+    };
+
+    for item in tree.items {
+        let mode_a: String = String::from_utf8(item.mode).unwrap();
+        let mut first: String = "0".repeat(6);
+        first.push_str(mode_a.as_ref());
+        /* Git's ls-tree displays the type of the object pointed to. */
+        let om = match object_read(&repo, item.sha.as_ref())? {
+            GObj::Tree(a) => a.fmt().to_vec(),
+            GObj::Tag(t) => t.fmt().to_vec(),
+            GObj::Blob(b) => b.fmt().to_vec(),
+            GObj::Commit(c) => c.fmt().to_vec(),
+            _ => {
+                return Err(WyagError::new(
+                    "Failed when retrieving object type during ls-tree",
+                ));
+            }
+        };
+        let second = match String::from_utf8(om) {
+            Ok(s) => s,
+            Err(m) => {
+                return Err(WyagError::new_with_error(
+                    "Failed to parse item type in ls-tree.",
+                    Box::new(m),
+                ));
+            }
+        };
+
+        let fourth = match String::from_utf8(item.path) {
+            Ok(s) => s,
+            Err(m) => {
+                return Err(WyagError::new_with_error(
+                    "Failed to parse item path in ls-tree.",
+                    Box::new(m),
+                ));
+            }
+        };
+
+        println!("{} {} {}\t{}", first, second, item.sha, fourth);
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tree_tests {
+
+    #[test]
+    fn treeTest() {}
+}
+
+/// EndRegion: Tree
+
+/// Region: Checkout
+
+fn tree_checkout(repo: &GitRepository, tree: GitTree, path: &str) -> Result<(), WyagError> {
+    for item in tree.items {
+        let path_utf8 = match String::from_utf8(item.path) {
+            Ok(s) => s,
+            Err(m) => {
+                return Err(WyagError::new_with_error(
+                    "Failed to parse item path in ls-tree.",
+                    Box::new(m),
+                ));
+            }
+        };
+
+        let dest: PathBuf = PathBuf::from(path).join(path_utf8);
+
+        match object_read(&repo, &item.sha)? {
+            GObj::Tree(a) => {
+                if let Err(m) = std::fs::create_dir(&dest) {
+                    return Err(WyagError::new_with_error(
+                        "Failed to create destination folder during tree_checkout",
+                        Box::new(m),
+                    ));
+                };
+                tree_checkout(&repo, a, dest.to_str().unwrap())?;
+            }
+            GObj::Blob(b) => {
+                if let Err(m) = std::fs::write(dest, b.blob_data) {
+                    return Err(WyagError::new_with_error(
+                        "Failed to write blob data to disk during tree_checkout",
+                        Box::new(m),
+                    ));
+                }
+            }
+            _ => {
+                return Err(WyagError::new(
+                    "Expected to retrieve a Tree or a Blob, but received some other type instead",
+                ));
+            }
+        };
+    }
+
+    Ok(())
+}
+/// EndRegion: Checkout
 
 #[derive(Debug, Default)]
 pub struct WyagError {

@@ -613,7 +613,7 @@ fn object_write(obj: &GitObject, actually_write: bool) -> Result<String, WyagErr
 fn object_find<'a>(
     repo: &GitRepository,
     name: &'a str,
-    fmt: &str,
+    fmt: Option<&str>,
     follow: bool,
 ) -> Option<&'a str> {
     return Some(name);
@@ -632,7 +632,7 @@ fn cat_file<'a>(repo: Option<GitRepository<'_>>, gtype: &str, obj: &str) -> Resu
             return Ok(());
         }
     };
-    let of = match object_find(&repo, obj, gtype, true) {
+    let of = match object_find(&repo, obj, Some(gtype), true) {
         Some(s) => s,
         None => {
             println!("no object found for the type: {}", gtype);
@@ -729,7 +729,7 @@ pub fn cmd_log(commit: &str) -> Result<(), WyagError> {
     };
 
     println!("digraph wyaglog{{");
-    let o = object_find(&repo, commit, "blob", true);
+    let o = object_find(&repo, commit, None, true);
     if let None = o {
         println!("No such object: {}", commit);
     }
@@ -990,7 +990,7 @@ pub fn cmd_ls_tree(name: &str) -> Result<(), WyagError> {
         }
     };
 
-    let of = match object_find(&repo, name, "tree", true) {
+    let of = match object_find(&repo, name, Some("tree"), true) {
         Some(s) => s,
         None => {
             println!("no object found for the type: {}", "tree");
@@ -1059,13 +1059,81 @@ mod tree_tests {
 
 /// Region: Checkout
 
+pub fn cmd_checkout(sha: &str, path: &str) -> Result<(), WyagError> {
+    let repo = match repo_find(".", false)? {
+        Some(gr) => gr,
+        None => {
+            println!("No repository was found, cannot use wyag-checkout");
+            return Ok(());
+        }
+    };
+
+    let of = match object_find(&repo, sha, None, true) {
+        Some(s) => s,
+        None => {
+            println!("no object found for the type: {}", "commit");
+            return Ok(());
+        }
+    };
+
+    let o: GitTree = match object_read(&repo, of)? {
+        // GObj::Blob(x) => Box::new(x),
+        GObj::Commit(y) => match object_read(&repo, y.kvlm.get("tree").unwrap()[0].as_ref()) {
+            Ok(gobj) => match gobj {
+                GObj::Tree(gobj) => gobj,
+                _ => {
+                    return Err(WyagError::new(
+                        "Expected a tree from this commit, but failed to retreive one",
+                    ));
+                }
+            },
+            Err(m) => {
+                return Err(WyagError::new_with_error(
+                    "Expected commit to contain a tree with the value 'tree' but got nothing",
+                    Box::new(m),
+                ));
+            }
+        },
+        // GObj::Tag(z) => Box::new(z),
+        GObj::Tree(a) => a,
+        _ => {
+            return Err(WyagError::new(
+                "encountered an error trying to read object in cmd_checkout. Expected a tree object or a commit object, got something else",
+            ));
+        }
+    };
+
+    /* Verify path is empty directory */
+    let p: PathBuf = PathBuf::from(path);
+    if p.exists() {
+        if !p.is_dir() {
+            return Err(WyagError::new("Supplied path was not a directory"));
+        } else if let Some(_x) = std::fs::read_dir(&p)
+            .expect("can't view this directory. Do you have permission?")
+            .next()
+        {
+            return Err(WyagError::new(
+                "Cannot create Git object directory, su pplied path is not empty.",
+            ));
+        }
+    }
+    if let Err(m) = std::fs::create_dir(&p) {
+        return Err(WyagError::new_with_error(
+            "Failed to checkout git object: Error creating directory path",
+            Box::new(m),
+        ));
+    };
+
+    tree_checkout(&repo, o, path)
+}
+
 fn tree_checkout(repo: &GitRepository, tree: GitTree, path: &str) -> Result<(), WyagError> {
     for item in tree.items {
         let path_utf8 = match String::from_utf8(item.path) {
             Ok(s) => s,
             Err(m) => {
                 return Err(WyagError::new_with_error(
-                    "Failed to parse item path in ls-tree.",
+                    "Failed to parse item path tree_checkout.",
                     Box::new(m),
                 ));
             }

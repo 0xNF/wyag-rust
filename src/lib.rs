@@ -1181,7 +1181,7 @@ fn tree_checkout(repo: &GitRepository, tree: GitTree, path: &str) -> Result<(), 
 }
 /// EndRegion: Checkout
 
-/// Region: Ref-A
+/// Region: Ref
 
 fn ref_resolve(repo: &GitRepository, ref_str: &str) -> Result<String, WyagError> {
     let path = repo_file_gr(&repo, false, vec![ref_str])?;
@@ -1286,7 +1286,7 @@ pub fn cmd_show_ref() -> Result<(), WyagError> {
     let repo = match repo_find(".", false)? {
         Some(gr) => gr,
         None => {
-            println!("No repository was found, cannot use wyag-checkout");
+            println!("No repository was found, cannot use wyag-show_ref");
             return Ok(());
         }
     };
@@ -1296,7 +1296,38 @@ pub fn cmd_show_ref() -> Result<(), WyagError> {
     Ok(())
 }
 
-/// EndRegion: Ref-A
+/// EndRegion: Ref
+
+/// Region: Tag
+
+pub fn cmd_tag(
+    name: Option<&str>,
+    obj: Option<&str>,
+    createTagObject: bool,
+) -> Result<(), WyagError> {
+    let repo = match repo_find(".", false)? {
+        Some(gr) => gr,
+        None => {
+            println!("No repository was found, cannot use wyag-tag");
+            return Ok(());
+        }
+    };
+
+    if let Some(n) = name {
+        let tagType = if createTagObject { "object" } else { "ref" };
+        tag_create(n, obj.unwrap(), tagType)
+    } else {
+        let refs = ref_list(&repo, None)?;
+        show_ref(&repo, refs, false, None);
+        Ok(())
+    }
+}
+
+fn tag_create(name: &str, obj: &str, tagType: &str) -> Result<(), WyagError> {
+    Ok(())
+}
+
+/// EndRegion: Tag
 
 #[derive(Debug, Default)]
 pub struct WyagError {

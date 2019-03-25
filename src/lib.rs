@@ -1300,11 +1300,7 @@ pub fn cmd_show_ref() -> Result<(), WyagError> {
 
 /// Region: Tag
 
-pub fn cmd_tag(
-    name: Option<&str>,
-    obj: Option<&str>,
-    createTagObject: bool,
-) -> Result<(), WyagError> {
+pub fn cmd_tag(name: &str, obj: &str, createTagObject: bool) -> Result<(), WyagError> {
     let repo = match repo_find(".", false)? {
         Some(gr) => gr,
         None => {
@@ -1313,9 +1309,9 @@ pub fn cmd_tag(
         }
     };
 
-    if let Some(n) = name {
+    if name.len() > 0 {
         let tagType = if createTagObject { "object" } else { "ref" };
-        tag_create(n, obj.unwrap(), tagType)
+        tag_create(name, obj, tagType)
     } else {
         let refs = ref_list(&repo, None)?;
         show_ref(&repo, refs, false, None);

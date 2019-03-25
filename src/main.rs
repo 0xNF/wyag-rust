@@ -54,6 +54,14 @@ fn main() {
             eprintln!("Failed to perform show-ref: {}", err);
             process::exit(1)
         }
+    } else if config.isTag {
+        let isA: bool = config.args[2].parse().expect(
+            "Failed to perform tag: somehow the -a flag was misinterpreted as a non-boolean",
+        );
+        if let Err(err) = lib::cmd_tag(config.args[0].as_ref(), config.args[1].as_ref(), isA) {
+            eprintln!("Failed to perform tag: {}", err);
+            process::exit(1)
+        }
     }
 }
 
@@ -229,7 +237,35 @@ fn parse_args(args: Vec<String>, c: &mut Config) {
                 break;
             }
 
-            "add" | "commit" | "merge" | "rebase" | "rev-parse" | "rm" | "tag" => nyi(arg),
+            "tag" => {
+                c.isTag = true;
+                let mut isObject: bool = false;
+                match args.next() {
+                    None => (),
+                    Some(s) => match s.as_ref() {
+                        "-a" => {
+                            isObject = true;
+                        }
+                        _ => (),
+                    },
+                };
+                let name = match args.next() {
+                    None => "",
+                    Some(n) => n,
+                };
+                let obj = match args.next() {
+                    None => "HEAD",
+                    Some(o) => o,
+                };
+
+                c.args.push(name.to_owned());
+                c.args.push(obj.to_owned());
+                c.args.push(isObject.to_string());
+
+                break;
+            }
+
+            "add" | "commit" | "merge" | "rebase" | "rev-parse" | "rm" => nyi(arg),
 
             "init" => {
                 c.isInit = true;

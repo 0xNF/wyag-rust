@@ -1191,6 +1191,52 @@ fn ref_resolve(repo: &GitRepository, ref_str: &str) -> Result<String, WyagError>
     }
 }
 
+fn ref_list(
+    repo: &GitRepository,
+    path: Option<&str>,
+) -> Result<LinkedHashMap<String, String>, WyagError> {
+    let realPath: PathBuf = match path {
+        Some(p) => PathBuf::from(p),
+        None => repo_dir_gr(repo, false, vec!["refs"])?,
+    };
+
+    let mut ret: LinkedHashMap<String, String> = LinkedHashMap::new();
+
+    // Git shows refs sorted.  To do the same, we use
+    // a LinkedHashMap and sort the output of the directory read
+    let mut i = std::fs::read_dir(realPath).expect("Failed to read path.");
+    while let Some(item) = i.next() {
+        let can = match item {
+            Ok(fd) => fd,
+            Err(m) => {
+                return Err(WyagError::new_with_error(
+                    "Failed to read item in directory",
+                    Box::new(m),
+                ));
+            }
+        };
+
+        let cf = can
+            .file_name()
+            .to_str()
+            .expect("Failed to unpack OsString while reading ref_list")
+            .to_owned();
+        if can.path().is_dir() {
+            ret.insert(
+                cf,
+                can.path()
+                    .to_str()
+                    .expect("Failed to unpack str to PathBuf while reading ref_list")
+                    .to_owned(),
+            );
+        } else {
+            let cfcopy = cf.clone();
+            ret.insert(cfcopy, ref_resolve(&repo, cf.as_ref())?);
+        }
+    }
+    Ok(ret)
+}
+
 /// EndRegion: Ref-A
 
 #[derive(Debug, Default)]

@@ -1191,16 +1191,21 @@ fn ref_resolve(repo: &GitRepository, ref_str: &str) -> Result<String, WyagError>
     }
 }
 
+enum RefType {
+    RefTypeSha(String),
+    RefTypeDict(LinkedHashMap<String, RefType>),
+}
+
 fn ref_list(
     repo: &GitRepository,
     path: Option<&str>,
-) -> Result<LinkedHashMap<String, String>, WyagError> {
+) -> Result<LinkedHashMap<String, RefType>, WyagError> {
     let realPath: PathBuf = match path {
         Some(p) => PathBuf::from(p),
         None => repo_dir_gr(repo, false, vec!["refs"])?,
     };
 
-    let mut ret: LinkedHashMap<String, String> = LinkedHashMap::new();
+    let mut ret: LinkedHashMap<String, RefType> = LinkedHashMap::new();
 
     // Git shows refs sorted.  To do the same, we use
     // a LinkedHashMap and sort the output of the directory read
@@ -1222,19 +1227,49 @@ fn ref_list(
             .expect("Failed to unpack OsString while reading ref_list")
             .to_owned();
         if can.path().is_dir() {
-            ret.insert(
-                cf,
-                can.path()
-                    .to_str()
-                    .expect("Failed to unpack str to PathBuf while reading ref_list")
-                    .to_owned(),
-            );
+            let r = ref_list(repo, Some(can.path().to_str().unwrap()))?;
+            ret.insert(cf, RefType::RefTypeDict(r));
         } else {
-            let cfcopy = cf.clone();
-            ret.insert(cfcopy, ref_resolve(&repo, cf.as_ref())?);
+            ret.insert(
+                cf.clone(),
+                RefType::RefTypeSha(ref_resolve(&repo, cf.as_ref())?),
+            );
         }
     }
     Ok(ret)
+}
+
+///
+/// with_hash should be default true
+/// predix should be default empty string
+fn show_ref(
+    repo: &GitRepository,
+    refs: LinkedHashMap<String, RefType>,
+    with_hash: bool,
+    prefix: Option<&str>,
+) {
+    for (k, v) in refs {
+        match v {
+            RefType::RefTypeSha(s) => {
+                let first = if with_hash {
+                    s + " "
+                } else {
+                    String::default()
+                };
+                let second = if let Some(p) = prefix {
+                    let mut p = PathBuf::from(p);
+                    let mut st = String::default();
+                    st.push(std::path::MAIN_SEPARATOR);
+                    p = p.join(st);
+                    p.to_str().unwrap().to_owned()
+                } else {
+                    String::default()
+                };
+                format!("{}{}{}", first, second, k);
+            }
+            RefType::RefTypeDict(d) => show_ref(repo, d, with_hash, prefix),
+        }
+    }
 }
 
 /// EndRegion: Ref-A

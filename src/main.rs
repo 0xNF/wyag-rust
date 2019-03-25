@@ -49,6 +49,11 @@ fn main() {
             eprintln!("Failed to perform checkout: {}", err);
             process::exit(1)
         }
+    } else if config.isShowRef {
+        if let Err(err) = lib::cmd_show_ref() {
+            eprintln!("Failed to perform show-ref: {}", err);
+            process::exit(1)
+        }
     }
 }
 
@@ -219,9 +224,12 @@ fn parse_args(args: Vec<String>, c: &mut Config) {
                 break;
             }
 
-            "add" | "commit" | "merge" | "rebase" | "rev-parse" | "rm" | "show-ref" | "tag" => {
-                nyi(arg)
+            "show-ref" => {
+                c.isShowRef = true;
+                break;
             }
+
+            "add" | "commit" | "merge" | "rebase" | "rev-parse" | "rm" | "tag" => nyi(arg),
 
             "init" => {
                 c.isInit = true;

@@ -1272,6 +1272,20 @@ fn show_ref(
     }
 }
 
+pub fn cmd_show_ref() -> Result<(), WyagError> {
+    let repo = match repo_find(".", false)? {
+        Some(gr) => gr,
+        None => {
+            println!("No repository was found, cannot use wyag-checkout");
+            return Ok(());
+        }
+    };
+
+    let reflist = ref_list(&repo, None)?;
+    show_ref(&repo, reflist, false, Some("refs"));
+    Ok(())
+}
+
 /// EndRegion: Ref-A
 
 #[derive(Debug, Default)]

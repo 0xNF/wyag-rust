@@ -621,14 +621,57 @@ fn object_write(obj: &GitObject, actually_write: bool) -> Result<String, WyagErr
     Ok(outStr)
 }
 
-// TODO not yet implemented
 fn object_find<'a>(
     repo: &GitRepository,
     name: &'a str,
     fmt: Option<&str>,
     follow: bool,
-) -> Option<&'a str> {
-    return Some(name);
+) -> Result<Option<String>, WyagError> {
+    let rvec: Vec<String> = object_resolve(repo, name)?;
+    if rvec.len() == 0 {
+        let errStr = format!("No such reference: {}", &name);
+        return Err(WyagError::new(errStr.as_ref()));
+    }
+    if rvec.len() > 1 {
+        let errStr = format!(
+            "Ambiguous reference {0}: Candidates are:\n - {1}.",
+            &name,
+            rvec.join("\n - ")
+        );
+        return Err(WyagError::new(errStr.as_ref()));
+    }
+
+    let mut sha = rvec[0].to_owned();
+    if let None = fmt {
+        return Ok(Some(sha));
+    }
+
+    loop {
+        let mut o = object_read(repo, sha.as_ref())?;
+        let fmtmatcher = match &o {
+            GObj::Blob(b) => String::from_utf8(b.fmt().to_vec()).unwrap(),
+            GObj::Commit(c) => String::from_utf8(c.fmt().to_vec()).unwrap(),
+            GObj::Tag(t) => String::from_utf8(t.fmt().to_vec()).unwrap(),
+            GObj::Tree(tr) => String::from_utf8(tr.fmt().to_vec()).unwrap(),
+        };
+        let fmtmatcher: &str = fmtmatcher.as_ref();
+        if fmtmatcher == fmt.unwrap() {
+            return Ok(Some(sha));
+        }
+        if !follow {
+            return Ok(None);
+        }
+        /* follow tags */
+        match &o {
+            GObj::Tag(t) => sha = t.kvlm["object"][0].to_owned(),
+            GObj::Commit(c) => {
+                if fmtmatcher == "tree" {
+                    sha = c.kvlm["tree"][0].to_owned();
+                }
+            }
+            _ => return Ok(None),
+        }
+    }
 }
 
 /// Resolve name to an object hash in repo.
@@ -711,14 +754,14 @@ fn cat_file<'a>(repo: Option<GitRepository<'_>>, gtype: &str, obj: &str) -> Resu
             return Ok(());
         }
     };
-    let of = match object_find(&repo, obj, Some(gtype), true) {
+    let of = match object_find(&repo, obj, Some(gtype), true)? {
         Some(s) => s,
         None => {
             println!("no object found for the type: {}", gtype);
             return Ok(());
         }
     };
-    let o: Box<dyn GitObject> = match object_read(&repo, of)? {
+    let o: Box<dyn GitObject> = match object_read(&repo, of.as_ref())? {
         GObj::Blob(x) => Box::new(x),
         GObj::Commit(y) => Box::new(y),
         GObj::Tag(z) => Box::new(z),
@@ -808,7 +851,7 @@ pub fn cmd_log(commit: &str) -> Result<(), WyagError> {
     };
 
     println!("digraph wyaglog{{");
-    let o = object_find(&repo, commit, None, true);
+    let o = object_find(&repo, commit, None, true)?;
     if let None = o {
         println!("No such object: {}", commit);
     }
@@ -1069,14 +1112,14 @@ pub fn cmd_ls_tree(name: &str) -> Result<(), WyagError> {
         }
     };
 
-    let of = match object_find(&repo, name, Some("tree"), true) {
+    let of = match object_find(&repo, name, Some("tree"), true)? {
         Some(s) => s,
         None => {
             println!("no object found for the type: {}", "tree");
             return Ok(());
         }
     };
-    let tree: GitTree = match object_read(&repo, of)? {
+    let tree: GitTree = match object_read(&repo, of.as_ref())? {
         GObj::Tree(a) => a,
         _ => {
             return Err(WyagError::new(
@@ -1147,7 +1190,7 @@ pub fn cmd_checkout(sha: &str, path: &str) -> Result<(), WyagError> {
         }
     };
 
-    let of = match object_find(&repo, sha, None, true) {
+    let of = match object_find(&repo, sha, None, true)? {
         Some(s) => s,
         None => {
             println!("no object found for the type: {}", "commit");
@@ -1155,7 +1198,7 @@ pub fn cmd_checkout(sha: &str, path: &str) -> Result<(), WyagError> {
         }
     };
 
-    let o: GitTree = match object_read(&repo, of)? {
+    let o: GitTree = match object_read(&repo, of.as_ref())? {
         // GObj::Blob(x) => Box::new(x),
         GObj::Commit(y) => match object_read(&repo, y.kvlm.get("tree").unwrap()[0].as_ref()) {
             Ok(gobj) => match gobj {

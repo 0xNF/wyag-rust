@@ -44,6 +44,11 @@ fn main() {
             eprintln!("Failed to perform ls-tree: {}", err);
             process::exit(1)
         }
+    } else if config.isCheckout {
+        if let Err(err) = lib::cmd_checkout(config.args[0].as_ref(), config.args[1].as_ref()) {
+            eprintln!("Failed to perform checkout: {}", err);
+            process::exit(1)
+        }
     }
 }
 
@@ -193,8 +198,30 @@ fn parse_args(args: Vec<String>, c: &mut Config) {
                 break;
             }
 
-            "add" | "checkout" | "commit" | "merge" | "rebase" | "rev-parse" | "rm"
-            | "show-ref" | "tag" => nyi(arg),
+            "checkout" => {
+                c.isCheckout = true;
+                let obj = match args.next() {
+                    Some(s) => s,
+                    None => {
+                        eprintln!("checkout requires two arguments, the [commit or tree] to checkout, and the [path to checkout to]. Received neither.");
+                        process::exit(1)
+                    }
+                };
+                let path = match args.next() {
+                    Some(s) => s,
+                    None => {
+                        eprintln!("Checkout required two arguments, failed to receive the second.");
+                        process::exit(1)
+                    }
+                };
+                c.args.push(obj.to_owned());
+                c.args.push(path.to_owned());
+                break;
+            }
+
+            "add" | "commit" | "merge" | "rebase" | "rev-parse" | "rm" | "show-ref" | "tag" => {
+                nyi(arg)
+            }
 
             "init" => {
                 c.isInit = true;

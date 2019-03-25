@@ -2,6 +2,7 @@ extern crate crypto;
 extern crate flate2;
 extern crate ini;
 extern crate linked_hash_map;
+extern crate regex;
 use crypto::digest::Digest;
 use crypto::sha1;
 use flate2::read::ZlibDecoder;
@@ -9,6 +10,7 @@ use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use ini::Ini;
 use linked_hash_map::LinkedHashMap;
+use regex::Regex;
 use std::collections::hash_map::HashMap;
 use std::io;
 use std::io::Read;
@@ -627,6 +629,73 @@ fn object_find<'a>(
     follow: bool,
 ) -> Option<&'a str> {
     return Some(name);
+}
+
+/// Resolve name to an object hash in repo.
+///
+/// This function is aware of:
+///
+/// - the HEAD literal
+/// - short and long hashes
+/// - tags
+/// - branches
+/// - remote branches
+fn object_resolve(repo: &GitRepository, name: &str) -> Result<Vec<String>, WyagError> {
+    let mut candidates: Vec<String> = Vec::new();
+    let hashRE = Regex::new(r"[0-9A-Fa-f]{1,16}$").unwrap();
+    let smallHashRE = Regex::new(r"^[0-9A-Fa-f]{1,16}$").unwrap();
+    // assert!(re.is_match("2014-01-01"));
+
+    /* Empty string? abort */
+    if name.trim().len() == 0 {
+        return Ok(candidates);
+    }
+
+    /* HEAD is nonambiguous */
+    if name == "HEAD" {
+        candidates.push(ref_resolve(repo, "HEAD")?);
+        return Ok(candidates);
+    }
+
+    if hashRE.is_match(name) {
+        let nlen = name.len();
+        let nlower = name.to_lowercase();
+        if nlen == 40 {
+            /* this is a complete hash */
+            candidates.push(nlower);
+            return Ok(candidates);
+        } else if nlen >= 4 {
+            /// This is a small hash 4 seems to be the minimal length
+            /// for git to consider something a short hash.
+            /// This limit is documented in man git-rev-parse
+            let prefix = nlower[0..2].as_ref();
+            let path = repo_dir_gr(repo, false, vec!["objects", prefix])?;
+            let rem: &str = nlower[2..].as_ref();
+            let mut i = std::fs::read_dir(path).expect("Failed to read path.");
+            while let Some(item) = i.next() {
+                match item {
+                    Ok(fd) => {
+                        let ff = fd.file_name();
+                        let fname: &str = ff.to_str().unwrap(); //.to_owned();
+                        if fname.starts_with(&rem) {
+                            let mut s = String::default();
+                            s.push_str(prefix);
+                            s.push_str(fname);
+                            candidates.push(s);
+                        }
+                    }
+                    Err(m) => {
+                        return Err(WyagError::new_with_error(
+                            "Failed to read item in directory",
+                            Box::new(m),
+                        ));
+                    }
+                };
+            }
+        }
+    }
+
+    Ok(candidates)
 }
 
 pub fn cmd_cat_file(gtype: &str, obj: &str) -> Result<(), WyagError> {

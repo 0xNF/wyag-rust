@@ -294,9 +294,9 @@ fn print_help_big() {
 Supported commands are:
     add             adds a file to staging
     cat-file        ?
-    checkout        checkouts a file from a commit into the working branch
+    checkout        checkout a commit into our worktree
     commit          adds all staged files to a new HEAD
-    hash-object     produces the SHA256 of the specified object
+    hash-object     produces the SHA1 of the specified object
     init            initializes an empty git repository
     log             shows recent commits
     ls-tree         ?

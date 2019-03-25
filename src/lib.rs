@@ -685,9 +685,7 @@ fn object_find<'a>(
 /// - remote branches
 fn object_resolve(repo: &GitRepository, name: &str) -> Result<Vec<String>, WyagError> {
     let mut candidates: Vec<String> = Vec::new();
-    let hashRE = Regex::new(r"[0-9A-Fa-f]{1,16}$").unwrap();
-    let smallHashRE = Regex::new(r"^[0-9A-Fa-f]{1,16}$").unwrap();
-    // assert!(re.is_match("2014-01-01"));
+    let hash_re = Regex::new(r"[0-9A-Fa-f]{1,16}$").unwrap();
 
     /* Empty string? abort */
     if name.trim().len() == 0 {
@@ -700,7 +698,7 @@ fn object_resolve(repo: &GitRepository, name: &str) -> Result<Vec<String>, WyagE
         return Ok(candidates);
     }
 
-    if hashRE.is_match(name) {
+    if hash_re.is_match(name) {
         let nlen = name.len();
         let nlower = name.to_lowercase();
         if nlen == 40 {
@@ -739,6 +737,23 @@ fn object_resolve(repo: &GitRepository, name: &str) -> Result<Vec<String>, WyagE
     }
 
     Ok(candidates)
+}
+
+pub fn cmd_rev_parse(name: &str, gtype: Option<&str>) -> Result<(), WyagError> {
+    let repo = match repo_find(".", false)? {
+        Some(gr) => gr,
+        None => {
+            println!("No repository was found, cannot use rev_parse");
+            return Ok(());
+        }
+    };
+
+    match object_find(&repo, name, gtype, true)? {
+        Some(s) => println!("{}", s),
+        None => println!(""),
+    };
+
+    Ok(())
 }
 
 pub fn cmd_cat_file(gtype: &str, obj: &str) -> Result<(), WyagError> {

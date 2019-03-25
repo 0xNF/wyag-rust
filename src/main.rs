@@ -62,6 +62,15 @@ fn main() {
             eprintln!("Failed to perform tag: {}", err);
             process::exit(1)
         }
+    } else if config.isRevParse {
+        let gOption: Option<&str> = None;
+        if config.args[0].len() != 0 {
+            gOption = Some(&config.args[0].to_owned());
+        }
+        if let Err(err) = lib::cmd_rev_parse(config.args[1].as_ref(), gOption) {
+            eprintln!("Failed to perform rev-parse: {}", err);
+            process::exit(1)
+        }
     }
 }
 
@@ -265,7 +274,40 @@ fn parse_args(args: Vec<String>, c: &mut Config) {
                 break;
             }
 
-            "add" | "commit" | "merge" | "rebase" | "rev-parse" | "rm" => nyi(arg),
+            "rev-parse" => {
+                c.isRevParse = true;
+                c.args[0] = "".to_owned();
+                while let Some(sa) = args.next() {
+                    match sa.as_ref() {
+                        "--wyag-type" => {
+                            let gtype = match args.next() {
+                                Some(s) => s.to_owned(),
+                                None => {
+                                    eprintln!("rev-parse received a --wyag-type flag but didnt receive any followup. If supplied, following parameter must be one of [blob, tree, commit, tag]");
+                                    process::exit(1)
+                                }
+                            };
+                            if gtype != "blob"
+                                && gtype != "commit"
+                                && gtype != "tag"
+                                && gtype != "tree"
+                            {
+                                eprintln!(
+                                        "first argument to rev-parse must be one of [blob, commit, tag, tree]"
+                                    );
+                                process::exit(1)
+                            };
+                            c.args[0] = gtype;
+                        }
+                        x => {
+                            c.args[1] = x.to_owned();
+                            break; // We have received a name, so we can quit parsing here
+                        }
+                    }
+                }
+            }
+
+            "add" | "commit" | "merge" | "rebase" | "rm" => nyi(arg),
 
             "init" => {
                 c.isInit = true;

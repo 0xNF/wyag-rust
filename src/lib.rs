@@ -41,6 +41,8 @@ enum GObj<'a> {
 /// Git Object Concrete Types
 struct GitTag<'a> {
     repo: Option<&'a GitRepository<'a>>,
+    kvlm: LinkedHashMap<String, Vec<String>>,
+    _data: Vec<u8>,
 }
 struct GitCommit<'a> {
     repo: Option<&'a GitRepository<'a>>,
@@ -59,17 +61,25 @@ struct GitTree<'a> {
 
 impl<'a> GitTag<'a> {
     fn new(repo: Option<&'a GitRepository>, bytes: &[u8]) -> GitTag<'a> {
-        GitTag { repo: repo } // TODO NYI
+        GitTag {
+            repo: repo,
+            kvlm: LinkedHashMap::default(),
+            _data: bytes.to_vec(),
+        }
     }
 }
 
 impl<'a> GitObject for GitTag<'a> {
     fn serialize(&self) -> Result<Vec<u8>, WyagError> {
-        Err(WyagError::new("Serialize on GitTag not yet implenented"))
+        let x = kvlm_serialize(&self.kvlm).into_bytes();
+        Ok(x)
     }
 
     fn deserialize(&mut self, data: Vec<u8>) -> Result<(), WyagError> {
-        Err(WyagError::new("Deserialize on GitTag not yet implemented"))
+        let mut hm: LinkedHashMap<String, Vec<String>> = LinkedHashMap::new();
+        kvlm_parse(data, 0, &mut hm);
+        self.kvlm = hm;
+        Ok(())
     }
 
     fn fmt(&self) -> &[u8] {
@@ -87,7 +97,7 @@ impl<'a> GitCommit<'a> {
             repo: repo,
             kvlm: LinkedHashMap::default(),
             _data: bytes.to_vec(),
-        } // TODO NYI
+        }
     }
 }
 

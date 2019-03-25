@@ -472,6 +472,72 @@ fn repo_file_path(root: &PathBuf, mk_dir: bool, paths: Vec<&str>) -> Result<Path
 
 // EndRegion: RepoPaths
 
+/// Region: GitIndex
+
+struct GitIndexEntry {
+    /// The last time a file's metadata changed.  This is a tuple (seconds, nanoseconds)
+    ctime: (usize, usize),
+
+    /// The last time a file's data changed.  This is a tuple (seconds, nanoseconds)
+    mtime: (usize, usize),
+
+    /// The ID of device containing this file
+    dev: String,
+
+    /// The file's inode number
+    ino: String,
+
+    /// The object type, either b1000 (regular), b1010 (symlink), b1110 (gitlink).
+    mode: String,
+
+    /// The object permissions, an integer.
+    mode_perms: u32,
+
+    /// User ID of owner
+    uid: String,
+
+    /// Group ID of owner (according to stat 2.  Isn'th)
+    gid: String,
+
+    /// Size of this object, in bytes
+    size: usize,
+
+    /// The object's hash as a hex string
+    obj: String,
+
+    flag_assume_valid: bool,
+
+    flag_extended: bool,
+
+    flag_stage: bool,
+
+    /// Length of the name if < 0xFFF (yes, three Fs), -1 otherwise
+    flag_name_length: bool,
+}
+
+impl GitIndexEntry {
+    fn new() -> GitIndexEntry {
+        GitIndexEntry {
+            ctime: (0, 0),
+            mtime: (0, 0),
+            dev: "".to_owned(),
+            ino: "".to_owned(),
+            mode: "b1000".to_owned(),
+            mode_perms: 0,
+            uid: "".to_owned(),
+            gid: "".to_owned(),
+            size: 0,
+            obj: "".to_owned(),
+            flag_assume_valid: false,
+            flag_extended: false,
+            flag_stage: false,
+            flag_name_length: false,
+        }
+    }
+}
+
+/// EndRegion: GitIndex
+
 // Region: Reading/Writing Objects
 
 /// Read object object_id from Git repository repo.  Return a

@@ -1171,6 +1171,28 @@ fn tree_checkout(repo: &GitRepository, tree: GitTree, path: &str) -> Result<(), 
 }
 /// EndRegion: Checkout
 
+/// Region: Ref-A
+
+fn ref_resolve(repo: &GitRepository, ref_str: &str) -> Result<String, WyagError> {
+    let path = repo_file_gr(&repo, false, vec![ref_str])?;
+    let s = match std::fs::read_to_string(path) {
+        Ok(s) => s.trim().to_owned(),
+        Err(m) => {
+            return Err(WyagError::new_with_error(
+                "Failed to read file",
+                Box::new(m),
+            ));
+        }
+    };
+    if s.starts_with("ref: ") {
+        return ref_resolve(repo, s.as_ref());
+    } else {
+        return Ok(s.to_owned());
+    }
+}
+
+/// EndRegion: Ref-A
+
 #[derive(Debug, Default)]
 pub struct WyagError {
     _message: String,
